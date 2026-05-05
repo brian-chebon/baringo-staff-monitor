@@ -1,21 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:staff_performance_mapping/models/user_model.dart';
-import 'package:staff_performance_mapping/providers/auth_provider.dart';
+
+import '../../constants/app_theme.dart';
+import '../../constants/baringo_data.dart';
+import '../../models/user_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/auth_service.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({Key? key}) : super(key: key);
+  const RegisterScreen({super.key});
 
   @override
-  _RegisterScreenState createState() => _RegisterScreenState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _scrollController = ScrollController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
-  late UserModel _user = UserModel(
+  UserModel _user = UserModel(
     id: '',
     firstName: '',
     middleName: '',
@@ -25,7 +29,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     email: '',
     department: '',
     designation: '',
-    county: 'Baringo',
+    county: BaringoData.county,
     subCounty: '',
     ward: '',
     workstation: '',
@@ -36,124 +40,50 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? _selectedSubDepartment;
   String? _selectedSubCounty;
   String? _selectedWard;
-  bool _obscurePassword = true;
 
-  final List<String> _subCounties = [
-    'Baringo Central',
-    'Tiaty East',
-    'Tiaty West',
-    'Eldama Ravine',
-    'Baringo South',
-    'Mogotio',
-    'Baringo North'
-  ];
-
-  final Map<String, List<String>> _subCountyWards = {
-    'Baringo North': [
-      'Barwessa',
-      'Saimo Kipsaraman',
-      'Saimo Soi',
-      'Kabartonjo',
-      'Bartabwa'
-    ],
-    'Tiaty West': ['Tirioko', 'Kolowa', 'Ribkwo'],
-    'Tiaty East': ['Silale', 'Tangulbei', 'Loiyamorok', 'Churo/Amaya'],
-    'Mogotio': ['Mogotio', 'Emining', 'Kisanana'],
-    'Baringo South': ['Mukutani', 'Marigat', 'Mochongoi', 'Ilchamus'],
-    'Eldama Ravine': [
-      'Lembus',
-      'Ravine',
-      'Lembus Kwen',
-      'Koibatek',
-      'Lembus Perkerra',
-      'Mumberes/Majimazuri'
-    ],
-    'Baringo Central': [
-      'Kabarnet',
-      'Sacho',
-      'Tenges',
-      'Kapropita',
-      'Ewalel Chapchap'
-    ],
-  };
-
-  final List<String> _departments = [
-    'Agriculture, Livestock, and Fisheries Development',
-    'Education and Vocational Training',
-    'Finance and Economic Planning',
-    'Industry, Commerce, Tourism, Cooperatives, and Enterprise Development',
-    'Lands, Housing, and Urban Development',
-    'Roads, Transport, Public Works, and Infrastructure Development',
-    'Water, Irrigation, Environment, Natural Resources, and Mining',
-    'Youth Affairs, Sports, Gender, Culture, and Social Services',
-    'Health Services',
-    'Devolution, Public Service, and Administration'
-  ];
-
-  final Map<String, List<String>> _subDepartments = {
-    'Agriculture, Livestock, and Fisheries Development': [
-      'Directorate Of Crop Production',
-      'Directorate Of Fisheries Development',
-      'Directorate Of Livestock Production',
-      'Directorate of Veterinary Services'
-    ],
-    'Water, Irrigation, Environment, Natural Resources, and Mining': [
-      'County Irrigation Development Unit (CIDU)',
-      'Climate Change GRM',
-      'County Water Boards',
-      'Water And Sanitation'
-    ],
-    'Health Services': [
-      'Preventive And Promotive Health Directorate',
-      'Health Planning And Administration Directorate',
-      'Medical Services Directorate'
-    ],
-    'Devolution, Public Service, and Administration': [
-      'Directorate Of Human Resource',
-      'Directorate Of Communication',
-      'Directorate Of Disaster Management',
-      'ICT And E-Government Directorate',
-      'The County Administration'
-    ],
-  };
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
+  void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message),
+      backgroundColor: isError ? Colors.red : AppColors.primaryGreen,
+      behavior: SnackBarBehavior.floating,
+    ));
   }
 
-  // Update the color scheme to match Baringo County colors
-  final Color primaryGreen = const Color(0xFF2E7D32); // Dark green for headers
-  final Color primaryBlue =
-      const Color(0xFF1565C0); // Blue for buttons and links
-  final Color backgroundColor = Colors.white;
-  final Color textColor = const Color(0xFF333333);
+  Future<void> _handleRegistration() async {
+    if (!_formKey.currentState!.validate()) {
+      _showSnackBar('Please fill all required fields.', isError: true);
+      return;
+    }
 
-  InputDecoration _buildInputDecoration(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      labelStyle: TextStyle(color: textColor),
-      prefixIcon: Icon(icon, color: primaryGreen),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.grey),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: Colors.grey.shade400),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: primaryGreen, width: 2),
-      ),
-      filled: true,
-      fillColor: backgroundColor,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    _formKey.currentState!.save();
+    setState(() => _isLoading = true);
+
+    final authProvider = context.read<AuthProvider>();
+    final navigator = Navigator.of(context);
+
+    _user = _user.copyWith(
+      department: _selectedDepartment,
+      subDepartment: _selectedSubDepartment,
+      subCounty: _selectedSubCounty,
+      ward: _selectedWard,
     );
+
+    try {
+      await authProvider.signUp(_user, _password);
+      _showSnackBar('Registration successful!');
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      if (mounted) navigator.pop();
+    } on AuthException catch (e) {
+      _showSnackBar(e.message, isError: true);
+    } catch (e) {
+      _showSnackBar('Registration error: $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
-  Widget _buildSectionHeader(String title) {
+  Widget _sectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16),
       child: Column(
@@ -161,18 +91,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
         children: [
           Text(
             title,
-            style: TextStyle(
-              fontSize: 24,
+            style: const TextStyle(
+              fontSize: 22,
               fontWeight: FontWeight.bold,
-              color: primaryGreen,
+              color: AppColors.primaryGreen,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Container(
-            width: 100,
-            height: 4,
+            width: 80,
+            height: 3,
             decoration: BoxDecoration(
-              color: primaryGreen,
+              color: AppColors.primaryGreen,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -181,394 +111,248 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  void _showSnackBar(String message,
-      {bool isError = false, bool isSuccess = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              isError
-                  ? Icons.error
-                  : (isSuccess ? Icons.check_circle : Icons.info),
-              color: Colors.white,
-            ),
-            const SizedBox(width: 8),
-            Expanded(child: Text(message)),
-          ],
-        ),
-        backgroundColor: isError
-            ? Colors.red.shade700
-            : (isSuccess ? Colors.green.shade700 : Colors.blue.shade700),
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-      ),
+  InputDecoration _decoration(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(icon, color: AppColors.primaryGreen),
     );
-  }
-
-  Future<void> _handleRegistration() async {
-    if (!_formKey.currentState!.validate()) {
-      _showSnackBar('Please fill in all required fields correctly.',
-          isError: true);
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      _formKey.currentState!.save();
-      _user = _user.copyWith(
-        department: _selectedDepartment,
-        subDepartment: _selectedSubDepartment,
-      );
-
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      bool result = await authProvider.signUp(_user, _password);
-
-      if (result) {
-        _showSnackBar('Registration successful!', isSuccess: true);
-        await Future.delayed(const Duration(seconds: 1));
-        if (mounted) {
-          Navigator.pop(context);
-        }
-      } else {
-        _showSnackBar('Failed to register. Please try again.', isError: true);
-      }
-    } catch (e) {
-      _showSnackBar('Registration error: ${e.toString()}', isError: true);
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final wards = _selectedSubCounty == null
+        ? <String>[]
+        : (BaringoData.subCountyWards[_selectedSubCounty] ?? const <String>[]);
+    final subDepartments = _selectedDepartment == null
+        ? <String>[]
+        : (BaringoData.subDepartments[_selectedDepartment] ?? const <String>[]);
+
     return Scaffold(
-      appBar: AppBar(
-        elevation: 0,
-        title: const Text('Staff Registration'),
-        backgroundColor: primaryGreen,
-      ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [primaryGreen, backgroundColor],
-            stops: const [0.0, 0.3],
-          ),
-        ),
-        child: SingleChildScrollView(
-          controller: _scrollController,
-          physics: const BouncingScrollPhysics(),
+      appBar: AppBar(title: const Text('Staff Registration')),
+      body: SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.all(16.0),
+        child: Card(
+          elevation: 4,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Card(
-              elevation: 8,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _buildSectionHeader('Personal Information'),
-                      TextFormField(
-                        decoration:
-                            _buildInputDecoration('First Name*', Icons.person),
-                        validator: (value) =>
-                            value!.isEmpty ? 'Required' : null,
-                        onSaved: (value) =>
-                            _user = _user.copyWith(firstName: value),
+            padding: const EdgeInsets.all(20),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _sectionHeader('Personal Information'),
+                  TextFormField(
+                    decoration: _decoration('First Name*', Icons.person),
+                    validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                    onSaved: (v) => _user = _user.copyWith(firstName: v),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    decoration:
+                        _decoration('Middle Name', Icons.person_outline),
+                    onSaved: (v) => _user = _user.copyWith(middleName: v ?? ''),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    decoration: _decoration('Surname*', Icons.person),
+                    validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                    onSaved: (v) => _user = _user.copyWith(surname: v),
+                  ),
+                  _sectionHeader('Contact Information'),
+                  TextFormField(
+                    decoration: _decoration('ID Number*', Icons.badge),
+                    keyboardType: TextInputType.number,
+                    validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                    onSaved: (v) => _user = _user.copyWith(idNumber: v),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    decoration: _decoration('Phone Number*', Icons.phone),
+                    keyboardType: TextInputType.phone,
+                    validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                    onSaved: (v) => _user = _user.copyWith(phoneNumber: v),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    decoration: _decoration('Email*', Icons.email),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Required';
+                      if (!v.contains('@')) return 'Invalid email';
+                      return null;
+                    },
+                    onSaved: (v) => _user = _user.copyWith(email: v?.trim()),
+                  ),
+                  _sectionHeader('Location Details'),
+                  DropdownButtonFormField<String>(
+                    decoration:
+                        _decoration('Sub-County*', Icons.location_city),
+                    initialValue: _selectedSubCounty,
+                    items: BaringoData.subCounties
+                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                        .toList(),
+                    onChanged: (v) => setState(() {
+                      _selectedSubCounty = v;
+                      _selectedWard = null;
+                    }),
+                    validator: (v) => v == null ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  if (wards.isNotEmpty)
+                    DropdownButtonFormField<String>(
+                      decoration: _decoration('Ward*', Icons.map),
+                      initialValue: _selectedWard,
+                      items: wards
+                          .map((w) =>
+                              DropdownMenuItem(value: w, child: Text(w)))
+                          .toList(),
+                      onChanged: (v) => setState(() => _selectedWard = v),
+                      validator: (v) => v == null ? 'Required' : null,
+                    ),
+                  _sectionHeader('Department Information'),
+                  DropdownButtonFormField<String>(
+                    decoration: _decoration('Department*', Icons.business),
+                    isExpanded: true,
+                    initialValue: _selectedDepartment,
+                    items: BaringoData.departments
+                        .map((d) => DropdownMenuItem(
+                              value: d,
+                              child: Text(d, overflow: TextOverflow.ellipsis),
+                            ))
+                        .toList(),
+                    onChanged: (v) => setState(() {
+                      _selectedDepartment = v;
+                      _selectedSubDepartment = null;
+                    }),
+                    validator: (v) => v == null ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 12),
+                  if (subDepartments.isNotEmpty)
+                    DropdownButtonFormField<String>(
+                      decoration:
+                          _decoration('Directorate*', Icons.account_tree),
+                      isExpanded: true,
+                      initialValue: _selectedSubDepartment,
+                      items: subDepartments
+                          .map((d) => DropdownMenuItem(
+                                value: d,
+                                child:
+                                    Text(d, overflow: TextOverflow.ellipsis),
+                              ))
+                          .toList(),
+                      onChanged: (v) =>
+                          setState(() => _selectedSubDepartment = v),
+                      validator: (v) => v == null ? 'Required' : null,
+                    ),
+                  if (subDepartments.isNotEmpty) const SizedBox(height: 12),
+                  TextFormField(
+                    decoration: _decoration(
+                      'Designation*',
+                      Icons.assignment_ind,
+                    ),
+                    validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                    onSaved: (v) => _user = _user.copyWith(designation: v),
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    decoration: _decoration('Workstation*', Icons.work),
+                    validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                    onSaved: (v) => _user = _user.copyWith(workstation: v),
+                  ),
+                  _sectionHeader('Security'),
+                  TextFormField(
+                    decoration: InputDecoration(
+                      labelText: 'Password*',
+                      prefixIcon: const Icon(
+                        Icons.lock,
+                        color: AppColors.primaryGreen,
                       ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        decoration: _buildInputDecoration(
-                            'Middle Name', Icons.person_outline),
-                        onSaved: (value) =>
-                            _user = _user.copyWith(middleName: value),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        decoration:
-                            _buildInputDecoration('Surname*', Icons.person),
-                        validator: (value) =>
-                            value!.isEmpty ? 'Required' : null,
-                        onSaved: (value) =>
-                            _user = _user.copyWith(surname: value),
-                      ),
-
-                      _buildSectionHeader('Contact Information'),
-                      TextFormField(
-                        decoration:
-                            _buildInputDecoration('ID Number*', Icons.badge),
-                        validator: (value) =>
-                            value!.isEmpty ? 'Required' : null,
-                        onSaved: (value) =>
-                            _user = _user.copyWith(idNumber: value),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        decoration:
-                            _buildInputDecoration('Phone Number*', Icons.phone),
-                        validator: (value) =>
-                            value!.isEmpty ? 'Required' : null,
-                        keyboardType: TextInputType.phone,
-                        onSaved: (value) =>
-                            _user = _user.copyWith(phoneNumber: value),
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        decoration:
-                            _buildInputDecoration('Email*', Icons.email),
-                        validator: (value) {
-                          if (value!.isEmpty) return 'Required';
-                          if (!value.contains('@')) return 'Invalid email';
-                          return null;
-                        },
-                        keyboardType: TextInputType.emailAddress,
-                        onSaved: (value) =>
-                            _user = _user.copyWith(email: value),
-                      ),
-
-                      _buildSectionHeader('Location Details'),
-                      DropdownButtonFormField<String>(
-                        decoration: _buildInputDecoration(
-                            'Sub-County*', Icons.location_city),
-                        value: _selectedSubCounty,
-                        items: _subCounties.map((String value) {
-                          return DropdownMenuItem<String>(
-                            value: value,
-                            child: Text(value),
-                          );
-                        }).toList(),
-                        onChanged: (value) {
-                          setState(() {
-                            _selectedSubCounty = value;
-                            _selectedWard = null;
-                            _user = _user.copyWith(subCounty: value);
-                          });
-                        },
-                        validator: (value) => value == null ? 'Required' : null,
-                      ),
-                      const SizedBox(height: 16),
-                      if (_selectedSubCounty != null)
-                        DropdownButtonFormField<String>(
-                          decoration: _buildInputDecoration('Ward*', Icons.map),
-                          value: _selectedWard,
-                          items: _subCountyWards[_selectedSubCounty]!
-                              .map((String value) {
-                            return DropdownMenuItem<String>(
-                              value: value,
-                              child: Text(value),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            setState(() {
-                              _selectedWard = value;
-                              _user = _user.copyWith(ward: value);
-                            });
-                          },
-                          validator: (value) =>
-                              value == null ? 'Required' : null,
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility
+                              : Icons.visibility_off,
+                          color: AppColors.primaryGreen,
                         ),
-
-                      _buildSectionHeader('Department Information'),
-                      DropdownButtonFormField<String>(
-                        decoration: _buildInputDecoration(
-                            'Department*', Icons.business),
-                        value: _selectedDepartment,
-                        items: _departments.map((String department) {
-                          return DropdownMenuItem<String>(
-                            value: department,
-                            child: Text(department),
-                          );
-                        }).toList(),
-                        onChanged: (String? newValue) {
-                          setState(() {
-                            _selectedDepartment = newValue;
-                            _selectedSubDepartment = null;
-                          });
-                        },
-                        validator: (value) => value == null ? 'Required' : null,
-                      ),
-                      const SizedBox(height: 16),
-                      if (_selectedDepartment != null &&
-                          _subDepartments.containsKey(_selectedDepartment))
-                        DropdownButtonFormField<String>(
-                          decoration: _buildInputDecoration(
-                              'Directorate*', Icons.account_tree),
-                          value: _selectedSubDepartment,
-                          items: _subDepartments[_selectedDepartment]!
-                              .map((String subDepartment) {
-                            return DropdownMenuItem<String>(
-                              value: subDepartment,
-                              child: Text(subDepartment),
-                            );
-                          }).toList(),
-                          onChanged: (String? newValue) {
-                            setState(() {
-                              _selectedSubDepartment = newValue;
-                            });
-                          },
-                          validator: (value) =>
-                              value == null ? 'Required' : null,
+                        onPressed: () => setState(
+                          () => _obscurePassword = !_obscurePassword,
                         ),
-                      const SizedBox(height: 16),
-                      // Add the new Designation field
-                      TextFormField(
-                        decoration: _buildInputDecoration(
-                            'Designation*', Icons.assignment_ind),
-                        validator: (value) =>
-                            value!.isEmpty ? 'Required' : null,
-                        onSaved: (value) =>
-                            _user = _user.copyWith(designation: value),
                       ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        decoration:
-                            _buildInputDecoration('Workstation*', Icons.work),
-                        validator: (value) =>
-                            value!.isEmpty ? 'Required' : null,
-                        onSaved: (value) =>
-                            _user = _user.copyWith(workstation: value),
-                      ),
-
-                      // Keep your existing Security section with updated colors
-                      _buildSectionHeader('Security'),
-                      TextFormField(
-                        decoration: InputDecoration(
-                          labelText: 'Password*',
-                          prefixIcon: Icon(Icons.lock, color: primaryGreen),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword
-                                  ? Icons.visibility
-                                  : Icons.visibility_off,
-                              color: primaryGreen,
-                            ),
-                            onPressed: () {
-                              setState(() {
-                                _obscurePassword = !_obscurePassword;
-                              });
-                            },
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade400),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                BorderSide(color: primaryGreen, width: 2),
-                          ),
-                          filled: true,
-                          fillColor: backgroundColor,
-                        ),
-                        obscureText: _obscurePassword,
-                        validator: (value) {
-                          if (value!.isEmpty) return 'Required';
-                          if (value.length < 6)
-                            return 'Password must be at least 6 characters';
-                          return null;
-                        },
-                        onSaved: (value) => _password = value!,
-                      ),
-
-                      const SizedBox(height: 32),
-
-                      // Registration button with updated colors
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        height: 56,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryGreen,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: _isLoading ? 0 : 4,
-                          ),
-                          onPressed: _isLoading ? null : _handleRegistration,
-                          child: _isLoading
-                              ? Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: const [
-                                    SizedBox(
-                                      height: 24,
-                                      width: 24,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 3,
-                                      ),
-                                    ),
-                                    SizedBox(width: 16),
-                                    Text(
-                                      'Registering...',
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : Text(
-                                  'Register',
+                    ),
+                    obscureText: _obscurePassword,
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Required';
+                      if (v.length < 8) {
+                        return 'Password must be at least 8 characters';
+                      }
+                      return null;
+                    },
+                    onSaved: (v) => _password = v ?? '',
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _handleRegistration,
+                      child: _isLoading
+                          ? const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 3,
+                                  ),
+                                ),
+                                SizedBox(width: 12),
+                                Text(
+                                  'Registering...',
                                   style: TextStyle(
-                                    color: backgroundColor,
-                                    fontSize: 18,
+                                    fontSize: 16,
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      Text(
-                        '* Required fields',
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                          fontSize: 12,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Already have an account? ',
-                            style: TextStyle(color: textColor),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: Text(
-                              'Login',
+                              ],
+                            )
+                          : const Text(
+                              'Register',
                               style: TextStyle(
-                                color: primaryBlue,
+                                fontSize: 16,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    '* Required fields',
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 12,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('Already have an account? '),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text(
+                          'Login',
+                          style: TextStyle(
+                            color: AppColors.accentBlue,
+                            fontWeight: FontWeight.bold,
                           ),
-                        ],
+                        ),
                       ),
                     ],
                   ),
-                ),
+                ],
               ),
             ),
           ),

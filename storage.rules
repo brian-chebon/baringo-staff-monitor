@@ -1,0 +1,26 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Photos attached to work reports.
+    // Layout: report_images/{userId}/{filename}
+    match /report_images/{userId}/{file=**} {
+      // Any signed-in staff (incl. admins) can view report photos.
+      allow read: if request.auth != null;
+
+      // Only the owner can upload to their own folder. Cap at 10 MB and
+      // require an image MIME type so the bucket cannot be abused as
+      // generic file storage.
+      allow write: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Default deny everything else.
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

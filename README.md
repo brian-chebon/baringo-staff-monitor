@@ -1,111 +1,118 @@
-# Bcg-staff-performance-mapping
+# Baringo Staff Performance Mapping
 
-## Project Overview
+A Flutter + Firebase application used by **Baringo County Government, Kenya** to
+track staff field activities, validate field visits with GPS coordinates, and
+generate performance reports.
 
-Bcg-staff-performance-mapping is a comprehensive application designed to enhance the tracking and management of staff performance within Baringo County. This tool provides a streamlined, efficient, and accountable method for monitoring the activities of staff members, particularly those working in the field.
+**Live demo:** [https://bcg-staff-app.web.app](https://bcg-staff-app.web.app)
 
-**Live Demo:** [https://bcg-staff-app.web.app](https://bcg-staff-app.web.app)
+---
 
 ## Features
 
-1. **User Registration and Authentication**
+- **Authentication** with Firebase Auth (email + password, password reset).
+- **Role-based UI** — separate dashboards for staff and administrators. Admin
+  status is gated server-side via Firestore security rules.
+- **Department-aware reporting** — Agriculture, Health, Water, Devolution, and
+  a generic fallback all share a common form scaffold and capture
+  department-specific fields.
+- **Field-visit verification** with GPS (`geolocator`) and best-effort IP
+  geolocation.
+- **Photo capture** uploaded to Firebase Storage and linked to the report.
+- **Admin dashboard** — paginated users / tasks tabs, department + date-range
+  filters, on-device PDF export of the filtered view.
+- **Map view** of any report location via `google_maps_flutter`.
 
-   - Secure account creation for staff members
-   - Role-based authentication (regular users and administrators)
+## County coverage
 
-2. **Work Submission and Tracking**
+The reference data in `lib/constants/baringo_data.dart` covers all 7
+sub-counties and 30 wards of Baringo County (IEBC ward boundaries) and the
+current departmental structure of the County Government:
 
-   - Detailed task reporting
-   - Field visit verification using geolocation
+- Baringo Central, Baringo North, Baringo South, Mogotio, Eldama Ravine,
+  Tiaty East, Tiaty West.
 
-3. **Geolocation Integration**
+## Tech stack
 
-   - Real-time tracking of staff locations during field visits
+- **Frontend:** Flutter (Material 3, Provider for state).
+- **Auth:** Firebase Authentication.
+- **Database:** Cloud Firestore.
+- **Storage:** Firebase Storage (report photos).
+- **Maps:** Google Maps Flutter.
+- **Hosting:** Firebase Hosting (`firebase deploy --only hosting`).
 
-4. **Responsive Design**
+## Requirements
 
-   - User-friendly interface built with Tailwind CSS
-   - Compatible with various devices and screen sizes
+- Flutter SDK ≥ 3.22, Dart ≥ 3.4.
+- A Firebase project with Authentication, Firestore, and Storage enabled.
+- A Google Maps API key (Android: meta-data in `AndroidManifest.xml`,
+  iOS: `AppDelegate`).
 
-5. **Admin Dashboard**
+## Getting started
 
-   - Overview of staff activities
-   - Performance analytics and reporting
+The project deliberately gitignores Firebase config (`.firebaserc`,
+`lib/firebase_options.dart`, `android/app/google-services.json`, iOS / macOS
+plists) and any signing keys / `.env` files. Generate them locally:
 
-6. **Data Management**
+```bash
+git clone https://github.com/Chebon-breezy/baringo-staff-monitor.git
+cd baringo-staff-monitor
+flutter pub get
 
-   - Efficient storage and retrieval of user information and work reports
-   - Data integrity and consistency across user interactions
+# Project alias — copy the template and put your project ID in
+cp .firebaserc.example .firebaserc
 
-7. **Accountability Features**
-   - Geolocation-based validation of field visits
-   - Transparent reporting system
+# FlutterFire writes lib/firebase_options.dart and the platform service files
+dart pub global activate flutterfire_cli
+flutterfire configure
 
-## Technology Stack
+# Drop in your Google Maps API key
+#   android/app/src/main/AndroidManifest.xml  →  com.google.android.geo.API_KEY
+#   ios/Runner/AppDelegate.swift              →  GMSServices.provideAPIKey(...)
 
-- **Frontend:** Flutter
-- **Backend:** Firebase
-- **Authentication:** Firebase Authentication
-- **Database:** Cloud Firestore
-- **Hosting:** Firebase Hosting
-- **Location Services:** Geolocator package
+flutter run
+```
 
-## Getting Started
+> **Heads up:** Firebase client API keys (in `firebase_options.dart`,
+> `google-services.json`, etc.) are designed to be embedded in client builds.
+> They identify the app, not authenticate it — security is enforced by
+> Firestore security rules, App Check, and API-key restrictions in the Google
+> Cloud Console. Earlier versions of this repository tracked those files; if
+> you need them rotated, regenerate the FlutterFire output and restrict the
+> keys in GCP.
 
-### Prerequisites
+Deploy security rules and indexes:
 
-- Flutter SDK
-- Firebase account
-- Android Studio or VS Code with Flutter extensions
+```bash
+firebase deploy --only firestore:rules,firestore:indexes
+```
 
-### Installation
+## Project layout
 
-1. Clone the repository:
+```
+lib/
+  constants/        Baringo county data + theme.
+  models/           UserModel, WorkReportModel.
+  providers/        AuthProvider (ChangeNotifier).
+  services/         Auth / Firestore / Storage / Location wrappers.
+  screens/
+    auth/           Login, register, department selection.
+    user/           Home, profile, report router + report screens.
+    admin/          Dashboard, user details, map view.
+  widgets/          CustomButton, CustomTextField.
+```
 
-   ```
-   git clone https://github.com/Chebon-breezy/baringo-staff-monitor.git
-   ```
+## Testing
 
-2. Navigate to the project directory:
-
-   ```
-   cd baringo-staff-monitor
-   ```
-
-3. Install dependencies:
-
-   ```
-   flutter pub get
-   ```
-
-4. Set up Firebase:
-
-   - Create a new Firebase project
-   - Add your Android and iOS apps to the Firebase project
-   - Download and add the `google-services.json` (for Android) and `GoogleService-Info.plist` (for iOS) to the respective app folders
-
-5. Run the app:
-   ```
-   flutter run
-   ```
+```bash
+flutter test
+flutter analyze
+```
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
-
-## Acknowledgments
-
-- Baringo County Government for the project initiative
-- All contributors and testers who have helped shape this project
+Pull requests welcome. Please run `flutter analyze` before opening a PR.
 
 ## Contact
 
-For any queries or further information, please contact:
-
-Brian Chebon - [brianlchebon@gmail.com]
-
-Project Link: [https://github.com/Chebon-breezy/baringo-staff-monitor](https://github.com/Chebon-breezy/baringo-staff-monitor)
+Brian Chebon — brianlchebon@gmail.com

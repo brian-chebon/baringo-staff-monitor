@@ -1,293 +1,230 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:staff_performance_mapping/models/user_model.dart';
-import 'package:staff_performance_mapping/models/work_report_model.dart';
+
+import '../models/user_model.dart';
+import '../models/work_report_model.dart';
 
 class DatabaseService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  DatabaseService({FirebaseFirestore? firestore})
+      : _firestore = firestore ?? FirebaseFirestore.instance;
 
-  // User-related methods
-  Future<void> createUser(UserModel user) async {
-    await _firestore.collection('users').doc(user.id).set(user.toMap());
-  }
+  final FirebaseFirestore _firestore;
+
+  CollectionReference<Map<String, dynamic>> get _users =>
+      _firestore.collection('users');
+
+  CollectionReference<Map<String, dynamic>> get _reports =>
+      _firestore.collection('work_reports');
+
+  // ---------------------------------------------------------------------------
+  // Users
+  // ---------------------------------------------------------------------------
+
+  Future<void> createUser(UserModel user) =>
+      _users.doc(user.id).set(user.toMap());
 
   Future<UserModel?> getUserById(String userId) async {
-    DocumentSnapshot doc =
-        await _firestore.collection('users').doc(userId).get();
-    if (doc.exists) {
-      return UserModel.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-    }
-    return null;
+    final doc = await _users.doc(userId).get();
+    if (!doc.exists) return null;
+    return UserModel.fromMap(doc.data()!, doc.id);
   }
 
   Stream<List<UserModel>> getAllUsers() {
-    return _firestore.collection('users').snapshots().map((snapshot) {
-      return snapshot.docs
-          .map((doc) => UserModel.fromMap(doc.data(), doc.id))
-          .toList();
-    });
+    return _users.snapshots().map(
+          (s) => s.docs.map((d) => UserModel.fromMap(d.data(), d.id)).toList(),
+        );
   }
 
   Future<List<UserModel>> getAllUsersOnce() async {
-    final snapshot = await _firestore.collection('users').get();
-    return snapshot.docs
-        .map((doc) => UserModel.fromMap(doc.data(), doc.id))
-        .toList();
+    final s = await _users.get();
+    return s.docs.map((d) => UserModel.fromMap(d.data(), d.id)).toList();
   }
 
-  // New method to get users by designation
   Stream<List<UserModel>> getUsersByDesignation(String designation) {
-    return _firestore
-        .collection('users')
+    return _users
         .where('designation', isEqualTo: designation)
         .snapshots()
-        .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => UserModel.fromMap(doc.data(), doc.id))
-          .toList();
-    });
+        .map((s) =>
+            s.docs.map((d) => UserModel.fromMap(d.data(), d.id)).toList());
   }
 
-  // New method to get users by department and designation
   Stream<List<UserModel>> getUsersByDepartmentAndDesignation(
-      String department, String designation) {
-    return _firestore
-        .collection('users')
+    String department,
+    String designation,
+  ) {
+    return _users
         .where('department', isEqualTo: department)
         .where('designation', isEqualTo: designation)
         .snapshots()
-        .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => UserModel.fromMap(doc.data(), doc.id))
-          .toList();
-    });
+        .map((s) =>
+            s.docs.map((d) => UserModel.fromMap(d.data(), d.id)).toList());
   }
 
-  // New method to get all unique designations
   Future<List<String>> getAllDesignations() async {
-    final snapshot = await _firestore.collection('users').get();
-    Set<String> designations = {};
-
-    for (var doc in snapshot.docs) {
-      String designation = doc.data()['designation'] ?? 'Unknown';
-      if (designation.isNotEmpty) {
-        designations.add(designation);
-      }
+    final s = await _users.get();
+    final designations = <String>{};
+    for (final d in s.docs) {
+      final v = (d.data()['designation'] ?? '').toString();
+      if (v.isNotEmpty) designations.add(v);
     }
-
     return designations.toList()..sort();
   }
 
-  Future<void> updateUserProfile(UserModel user) async {
-    await _firestore.collection('users').doc(user.id).update(user.toMap());
-  }
+  Future<void> updateUserProfile(UserModel user) =>
+      _users.doc(user.id).update(user.toMap());
 
-  // Updated method to include designation in admin checks
+  /// True when the user is an admin. Treats the boolean flag as authoritative
+  /// and additionally accepts a designation that contains "admin" so that
+  /// existing accounts created before the flag rollout still work.
   Future<bool> isUserAdmin(String userId) async {
-    try {
-      DocumentSnapshot userDoc =
-          await _firestore.collection('users').doc(userId).get();
-      final userData = userDoc.data() as Map<String, dynamic>;
-      // Check both isAdmin flag and if designation contains "admin" (case insensitive)
-      return userData['isAdmin'] == true ||
-          (userData['designation'] ?? '').toLowerCase().contains('admin');
-    } catch (e) {
-      print('Error checking admin status: $e');
-      return false;
-    }
+    final doc = await _users.doc(userId).get();
+    if (!doc.exists) return false;
+    final data = doc.data() ?? {};
+    if (data['isAdmin'] == true) return true;
+    final designation = (data['designation'] ?? '').toString().toLowerCase();
+    return designation.contains('admin');
   }
 
-  // Advanced Analytics Methods
-
-  // New method to get staff count by designation
   Future<Map<String, int>> getStaffCountByDesignation() async {
-    final snapshot = await _firestore.collection('users').get();
-    Map<String, int> designationCounts = {};
-
-    for (var doc in snapshot.docs) {
-      String designation = doc.data()['designation'] ?? 'Unknown';
-      designationCounts[designation] =
-          (designationCounts[designation] ?? 0) + 1;
+    final s = await _users.get();
+    final counts = <String, int>{};
+    for (final d in s.docs) {
+      final designation = (d.data()['designation'] ?? 'Unknown').toString();
+      counts[designation] = (counts[designation] ?? 0) + 1;
     }
-
-    return designationCounts;
+    return counts;
   }
 
-  // New method to get staff count by department and designation
   Future<Map<String, Map<String, int>>>
       getStaffCountByDepartmentAndDesignation() async {
-    final snapshot = await _firestore.collection('users').get();
-    Map<String, Map<String, int>> departmentDesignationCounts = {};
-
-    for (var doc in snapshot.docs) {
-      String department = doc.data()['department'] ?? 'Unknown';
-      String designation = doc.data()['designation'] ?? 'Unknown';
-
-      departmentDesignationCounts[department] ??= {};
-      departmentDesignationCounts[department]![designation] =
-          (departmentDesignationCounts[department]![designation] ?? 0) + 1;
+    final s = await _users.get();
+    final counts = <String, Map<String, int>>{};
+    for (final d in s.docs) {
+      final dept = (d.data()['department'] ?? 'Unknown').toString();
+      final desig = (d.data()['designation'] ?? 'Unknown').toString();
+      counts[dept] ??= {};
+      counts[dept]![desig] = (counts[dept]![desig] ?? 0) + 1;
     }
-
-    return departmentDesignationCounts;
+    return counts;
   }
 
-  // Work report-related methods
-  Future<void> submitWorkReport(WorkReportModel report) async {
-    await _firestore.collection('work_reports').add(report.toMap());
-  }
+  // ---------------------------------------------------------------------------
+  // Work reports
+  // ---------------------------------------------------------------------------
+
+  Future<void> submitWorkReport(WorkReportModel report) =>
+      _reports.add(report.toMap());
 
   Stream<List<WorkReportModel>> getWorkReports() {
-    return _firestore
-        .collection('work_reports')
+    return _reports
         .orderBy('date', descending: true)
         .snapshots()
-        .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => WorkReportModel.fromMap(doc.data(), doc.id))
-          .toList();
-    });
-  }
-
-  Stream<List<WorkReportModel>> getUserWorkReports(String userId) {
-    return _firestore
-        .collection('work_reports')
-        .where('userId', isEqualTo: userId)
-        .orderBy('date', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => WorkReportModel.fromMap(doc.data(), doc.id))
+        .map((s) => s.docs
+            .map((d) => WorkReportModel.fromMap(d.data(), d.id))
             .toList());
   }
 
-  Stream<List<WorkReportModel>> getAllWorkReports() {
-    return _firestore
-        .collection('work_reports')
+  Stream<List<WorkReportModel>> getUserWorkReports(String userId) {
+    return _reports
+        .where('userId', isEqualTo: userId)
         .orderBy('date', descending: true)
         .snapshots()
-        .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => WorkReportModel.fromMap(doc.data(), doc.id))
-          .toList();
-    });
+        .map((s) => s.docs
+            .map((d) => WorkReportModel.fromMap(d.data(), d.id))
+            .toList());
   }
 
+  Stream<List<WorkReportModel>> getAllWorkReports() => getWorkReports();
+
   Future<List<WorkReportModel>> getAllWorkReportsOnce() async {
-    final snapshot = await _firestore
-        .collection('work_reports')
-        .orderBy('date', descending: true)
-        .get();
-    return snapshot.docs
-        .map((doc) => WorkReportModel.fromMap(doc.data(), doc.id))
+    final s = await _reports.orderBy('date', descending: true).get();
+    return s.docs
+        .map((d) => WorkReportModel.fromMap(d.data(), d.id))
         .toList();
   }
 
-  // Department-related methods
   Future<List<String>> getAllDepartments() async {
-    final usersSnapshot = await _firestore.collection('users').get();
-    final workReportsSnapshot =
-        await _firestore.collection('work_reports').get();
-
-    Set<String> departments = {};
-
-    for (var doc in usersSnapshot.docs) {
-      departments.add(doc.data()['department'] ?? 'Unknown');
+    final users = await _users.get();
+    final reports = await _reports.get();
+    final set = <String>{};
+    for (final d in users.docs) {
+      set.add((d.data()['department'] ?? 'Unknown').toString());
     }
-
-    for (var doc in workReportsSnapshot.docs) {
-      departments.add(doc.data()['department'] ?? 'Unknown');
+    for (final d in reports.docs) {
+      set.add((d.data()['department'] ?? 'Unknown').toString());
     }
-
-    return departments.toList()..sort();
+    return set.toList()..sort();
   }
 
-  // Location-related methods
-  Future<void> updateUserLocation(String userId, GeoPoint location) async {
-    await _firestore.collection('users').doc(userId).update({
+  Future<void> updateUserLocation(String userId, GeoPoint location) {
+    return _users.doc(userId).update({
       'lastKnownLocation': location,
       'lastLocationUpdate': FieldValue.serverTimestamp(),
     });
   }
 
   Stream<GeoPoint?> getUserLocation(String userId) {
-    return _firestore
-        .collection('users')
-        .doc(userId)
-        .snapshots()
-        .map((snapshot) => snapshot.data()?['lastKnownLocation'] as GeoPoint?);
+    return _users.doc(userId).snapshots().map(
+          (s) => s.data()?['lastKnownLocation'] as GeoPoint?,
+        );
   }
 
-  // Analytics methods
   Future<Map<String, int>> getTaskCountByDepartment() async {
-    final snapshot = await _firestore.collection('work_reports').get();
-    final reports = snapshot.docs
-        .map((doc) => WorkReportModel.fromMap(doc.data(), doc.id))
-        .toList();
-
-    Map<String, int> taskCounts = {};
-    for (var report in reports) {
-      taskCounts[report.department] = (taskCounts[report.department] ?? 0) + 1;
+    final s = await _reports.get();
+    final counts = <String, int>{};
+    for (final d in s.docs) {
+      final dept = (d.data()['department'] ?? 'Unknown').toString();
+      counts[dept] = (counts[dept] ?? 0) + 1;
     }
-
-    return taskCounts;
+    return counts;
   }
 
   Future<List<WorkReportModel>> getRecentWorkReports({int limit = 10}) async {
-    final snapshot = await _firestore
-        .collection('work_reports')
+    final s = await _reports
         .orderBy('date', descending: true)
         .limit(limit)
         .get();
-
-    return snapshot.docs
-        .map((doc) => WorkReportModel.fromMap(doc.data(), doc.id))
+    return s.docs
+        .map((d) => WorkReportModel.fromMap(d.data(), d.id))
         .toList();
   }
 
-// Method to get users by ward with optional designation filter
-  Stream<List<UserModel>> getUsersByWard(String ward, {String? designation}) {
-    Query query = _firestore.collection('users').where('ward', isEqualTo: ward);
-
+  Stream<List<UserModel>> getUsersByWard(
+    String ward, {
+    String? designation,
+  }) {
+    Query<Map<String, dynamic>> query =
+        _users.where('ward', isEqualTo: ward);
     if (designation != null) {
       query = query.where('designation', isEqualTo: designation);
     }
-
-    return query.snapshots().map((snapshot) {
-      return snapshot.docs
-          .map((doc) =>
-              UserModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-          .toList();
-    });
+    return query.snapshots().map(
+          (s) => s.docs.map((d) => UserModel.fromMap(d.data(), d.id)).toList(),
+        );
   }
 
-  // Method to get users by sub-county with optional designation filter
-  Stream<List<UserModel>> getUsersBySubCounty(String subCounty,
-      {String? designation}) {
-    Query query =
-        _firestore.collection('users').where('subCounty', isEqualTo: subCounty);
-
+  Stream<List<UserModel>> getUsersBySubCounty(
+    String subCounty, {
+    String? designation,
+  }) {
+    Query<Map<String, dynamic>> query =
+        _users.where('subCounty', isEqualTo: subCounty);
     if (designation != null) {
       query = query.where('designation', isEqualTo: designation);
     }
-
-    return query.snapshots().map((snapshot) {
-      return snapshot.docs
-          .map((doc) =>
-              UserModel.fromMap(doc.data() as Map<String, dynamic>, doc.id))
-          .toList();
-    });
+    return query.snapshots().map(
+          (s) => s.docs.map((d) => UserModel.fromMap(d.data(), d.id)).toList(),
+        );
   }
 
-  // New method to get performance reports by designation
   Stream<List<WorkReportModel>> getWorkReportsByDesignation(
-      String designation) {
-    return _firestore
-        .collection('work_reports')
+    String designation,
+  ) {
+    return _reports
         .where('userDesignation', isEqualTo: designation)
         .orderBy('date', descending: true)
         .snapshots()
-        .map((snapshot) {
-      return snapshot.docs
-          .map((doc) => WorkReportModel.fromMap(doc.data(), doc.id))
-          .toList();
-    });
+        .map((s) => s.docs
+            .map((d) => WorkReportModel.fromMap(d.data(), d.id))
+            .toList());
   }
 }

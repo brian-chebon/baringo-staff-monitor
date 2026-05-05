@@ -2,40 +2,46 @@ import 'package:flutter/material.dart';
 
 class CustomTextField extends StatelessWidget {
   final String labelText;
-  final Function(String?) onSaved;
+  final void Function(String?)? onSaved;
   final String? Function(String?)? validator;
   final bool obscureText;
   final int? maxLines;
   final String? initialValue;
-  final TextInputType? keyboardType; // Add this line
+  final TextInputType? keyboardType;
   final TextEditingController? controller;
   final void Function(String)? onChanged;
+  final IconData? prefixIcon;
 
-  CustomTextField({
+  const CustomTextField({
+    super.key,
     required this.labelText,
-    required this.onSaved,
+    this.onSaved,
     this.validator,
     this.obscureText = false,
     this.maxLines = 1,
     this.initialValue,
-    this.keyboardType, // Add this line
+    this.keyboardType,
     this.controller,
     this.onChanged,
+    this.prefixIcon,
   });
 
   @override
   Widget build(BuildContext context) {
     return TextFormField(
-      initialValue: initialValue,
+      initialValue: controller == null ? initialValue : null,
+      controller: controller,
       decoration: InputDecoration(
         labelText: labelText,
+        prefixIcon: prefixIcon == null ? null : Icon(prefixIcon),
         border: const OutlineInputBorder(),
       ),
       obscureText: obscureText,
       validator: validator,
       onSaved: onSaved,
-      maxLines: maxLines,
-      keyboardType: keyboardType, // Add this line
+      onChanged: onChanged,
+      maxLines: obscureText ? 1 : maxLines,
+      keyboardType: keyboardType,
     );
   }
 }

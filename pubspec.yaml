@@ -1,67 +1,59 @@
 name: staff_performance_mapping
-description: A Flutter application for tracking staff performance and location.
+description: Baringo County Government staff performance and field-activity tracking app.
 
-# The following line prevents the package from being accidentally published to
-# pub.dev using `pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: 'none'
 
-# The following defines the version and build number for your application.
-version: 1.0.0+1
+version: 1.2.0+3
 
 environment:
-  sdk: ">=2.12.0 <3.0.0"
+  sdk: '>=3.4.0 <4.0.0'
+  flutter: '>=3.22.0'
 
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  cupertino_icons: ^1.0.2
+  cupertino_icons: ^1.0.9
 
   # Firebase
-  firebase_core: ^3.5.0
-  firebase_auth: ^5.3.0
-  cloud_firestore: ^5.4.2
+  firebase_core: ^4.7.0
+  firebase_auth: ^6.4.0
+  cloud_firestore: ^6.3.0
+  firebase_storage: ^13.0.0
 
-  # State Management
-  provider: ^6.0.5
+  # State management
+  provider: ^6.1.5
 
-  # Location Services
-  geolocator: ^13.0.1
-  google_maps_flutter: ^2.3.0
+  # Location & maps
+  geolocator: ^14.0.2
+  google_maps_flutter: ^2.17.0
 
-  # HTTP requests
-  http: ^1.2.2
+  # Network
+  http: ^1.6.0
 
-  # Date formatting
-  intl: ^0.19.0
-  pdf: ^3.11.1
-  path_provider: ^2.1.4
-  open_file: ^3.5.5
-  csv: ^6.0.0
-  universal_html: ^2.2.4
+  # Formatting / export
+  intl: ^0.20.2
+  pdf: ^3.12.0
+  printing: ^5.14.3
+  csv: ^8.0.0
+  path_provider: ^2.1.5
+  open_file: ^3.5.11
+  universal_html: ^2.3.0
 
-  # Image picker
-  image_picker: ^0.8.4+4
-  printing: ^5.13.4
+  # Image capture & rendering
+  image_picker: ^1.2.2
+  flutter_svg: ^2.0.16
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
+  flutter_lints: ^6.0.0
 
-# Flutter specific configuration
 flutter:
   uses-material-design: true
-  
-  # To add assets to your application, add an assets section here
+  generate: true
   assets:
     - assets/images/bcg_logo.png
-
-  # To add custom fonts to your application, add a fonts section here
-  # fonts:
-  #   - family: Schyler
-  #     fonts:
-  #       - asset: fonts/Schyler-Regular.ttf
-  #       - asset: fonts/Schyler-Italic.ttf
-  #         style: italic
+    - assets/images/baringo_flag.svg

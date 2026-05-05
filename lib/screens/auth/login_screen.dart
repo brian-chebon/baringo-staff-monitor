@@ -1,98 +1,136 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
-import 'package:staff_performance_mapping/providers/auth_provider.dart';
-import 'package:staff_performance_mapping/screens/auth/register_screen.dart';
-import 'package:staff_performance_mapping/screens/auth/department_selection_screen.dart';
-import 'package:staff_performance_mapping/screens/user/user_home_screen.dart';
-import 'package:staff_performance_mapping/screens/admin/admin_dashboard.dart';
+
+import '../../constants/app_theme.dart';
+import '../../l10n/generated/app_localizations.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/locale_provider.dart';
+import '../../services/auth_service.dart';
+import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+  const LoginScreen({super.key});
 
   @override
-  _LoginScreenState createState() => _LoginScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  String _email = '';
-  String _password = '';
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _rememberMe = false;
+  bool _obscurePassword = true;
+  bool _isSigningIn = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _signIn() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isSigningIn = true);
+
+    final messenger = ScaffoldMessenger.of(context);
+    final authProvider = context.read<AuthProvider>();
+
+    try {
+      await authProvider.signIn(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
+    } on AuthException catch (e) {
+      messenger.showSnackBar(SnackBar(
+        content: Text(e.message),
+        backgroundColor: Colors.red,
+      ));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+        content: Text('$e'),
+        backgroundColor: Colors.red,
+      ));
+    } finally {
+      if (mounted) setState(() => _isSigningIn = false);
+    }
+  }
+
+  Future<void> _showForgotPasswordDialog() async {
+    final l = AppLocalizations.of(context);
+    final controller = TextEditingController(text: _emailController.text);
+    final formKey = GlobalKey<FormState>();
+    final messenger = ScaffoldMessenger.of(context);
+    final authProvider = context.read<AuthProvider>();
+
+    final email = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text(l.resetPassword),
+          content: Form(
+            key: formKey,
+            child: TextFormField(
+              controller: controller,
+              keyboardType: TextInputType.emailAddress,
+              decoration: InputDecoration(
+                labelText: l.email,
+                prefixIcon: const Icon(Icons.email),
+              ),
+              validator: (v) {
+                final value = v?.trim() ?? '';
+                if (value.isEmpty) return l.enterAnEmail;
+                if (!value.contains('@')) return l.invalidEmail;
+                return null;
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(l.cancel),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  Navigator.pop(ctx, controller.text.trim());
+                }
+              },
+              child: Text(l.sendLink),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (email == null) return;
+
+    try {
+      await authProvider.resetPassword(email);
+      messenger.showSnackBar(SnackBar(
+        content: Text(l.passwordResetSent),
+        backgroundColor: AppColors.primaryGreen,
+      ));
+    } on AuthException catch (e) {
+      messenger.showSnackBar(SnackBar(
+        content: Text(e.message),
+        backgroundColor: Colors.red,
+      ));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
-    final size = MediaQuery.of(context).size;
-
+    final l = AppLocalizations.of(context);
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: SingleChildScrollView(
           child: Column(
             children: [
-              // Top Panel with Logo and Title
-              Container(
-                width: double.infinity,
-                color: const Color(0xFF1B5E20),
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  children: [
-                    // Logo container with image
-                    Container(
-                      width: 120,
-                      height: 120,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.white,
-                          width: 2,
-                        ),
-                      ),
-                      child: ClipOval(
-                        child: Image.asset(
-                          'assets/images/bcg_logo.png', // Add your logo image path here
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return const Center(
-                              child: Text(
-                                'BCG',
-                                style: TextStyle(
-                                  color: Color(0xFF1B5E20),
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Baringo County\nGovernment',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        height: 1.2,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Staff Performance Monitoring System',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 16,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Login Form
+              _buildHeader(l),
               Padding(
                 padding: const EdgeInsets.all(24.0),
                 child: Form(
@@ -100,69 +138,71 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Welcome Back',
-                        style: TextStyle(
-                          color: Color(0xFF1B5E20),
-                          fontSize: 32,
+                      Text(
+                        l.welcomeBack,
+                        style: const TextStyle(
+                          color: AppColors.primaryGreen,
+                          fontSize: 28,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Please sign in to continue',
-                        style: TextStyle(
+                      const SizedBox(height: 6),
+                      Text(
+                        l.pleaseSignInToContinue,
+                        style: const TextStyle(
                           color: Colors.grey,
-                          fontSize: 16,
+                          fontSize: 15,
                         ),
                       ),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
                       TextFormField(
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        autofillHints: const [AutofillHints.email],
                         decoration: InputDecoration(
-                          labelText: 'Email',
-                          labelStyle: const TextStyle(color: Color(0xFF1B5E20)),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                const BorderSide(color: Color(0xFF4CAF50)),
+                          labelText: l.email,
+                          prefixIcon: const Icon(
+                            Icons.email,
+                            color: AppColors.primaryGreen,
                           ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                const BorderSide(color: Color(0xFF1B5E20)),
-                          ),
-                          prefixIcon:
-                              const Icon(Icons.email, color: Color(0xFF1B5E20)),
                         ),
-                        validator: (value) =>
-                            value!.isEmpty ? 'Enter an email' : null,
-                        onSaved: (value) => _email = value!,
+                        validator: (v) {
+                          final value = v?.trim() ?? '';
+                          if (value.isEmpty) return l.enterAnEmail;
+                          if (!value.contains('@')) return l.invalidEmail;
+                          return null;
+                        },
                       ),
                       const SizedBox(height: 16),
                       TextFormField(
-                        obscureText: true,
+                        controller: _passwordController,
+                        obscureText: _obscurePassword,
+                        autofillHints: const [AutofillHints.password],
                         decoration: InputDecoration(
-                          labelText: 'Password',
-                          labelStyle: const TextStyle(color: Color(0xFF1B5E20)),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                const BorderSide(color: Color(0xFF4CAF50)),
+                          labelText: l.password,
+                          prefixIcon: const Icon(
+                            Icons.lock,
+                            color: AppColors.primaryGreen,
                           ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                const BorderSide(color: Color(0xFF1B5E20)),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility
+                                  : Icons.visibility_off,
+                              color: AppColors.primaryGreen,
+                            ),
+                            onPressed: () => setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            ),
                           ),
-                          prefixIcon:
-                              const Icon(Icons.lock, color: Color(0xFF1B5E20)),
                         ),
-                        validator: (value) => value!.length < 6
-                            ? 'Password must be 6+ chars'
-                            : null,
-                        onSaved: (value) => _password = value!,
+                        validator: (v) {
+                          if (v == null || v.isEmpty) return l.required;
+                          if (v.length < 8) return l.passwordMin8;
+                          return null;
+                        },
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -170,115 +210,92 @@ class _LoginScreenState extends State<LoginScreen> {
                             children: [
                               Switch(
                                 value: _rememberMe,
-                                onChanged: (value) {
-                                  setState(() {
-                                    _rememberMe = value;
-                                  });
-                                },
-                                activeColor: const Color(0xFF1B5E20),
+                                onChanged: (v) =>
+                                    setState(() => _rememberMe = v),
+                                activeThumbColor: AppColors.primaryGreen,
                               ),
-                              const Text(
-                                'Remember me',
-                                style: TextStyle(color: Colors.grey),
+                              Text(
+                                l.rememberMe,
+                                style: const TextStyle(color: Colors.grey),
                               ),
                             ],
                           ),
                           TextButton(
-                            onPressed: () => _showForgotPasswordDialog(
-                                context, authProvider),
-                            child: const Text(
-                              'Forgot password?',
-                              style: TextStyle(color: Color(0xFF1976D2)),
+                            onPressed: _showForgotPasswordDialog,
+                            child: Text(
+                              l.forgotPassword,
+                              style: const TextStyle(
+                                color: AppColors.accentBlue,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 16),
                       SizedBox(
                         width: double.infinity,
                         height: 48,
                         child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1B5E20),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                          ),
-                          onPressed: () async {
-                            if (_formKey.currentState!.validate()) {
-                              _formKey.currentState!.save();
-                              bool result =
-                                  await authProvider.signIn(_email, _password);
-                              if (result) {
-                                final user =
-                                    await authProvider.getCurrentUser();
-                                if (user != null) {
-                                  if (user.department.isEmpty) {
-                                    Navigator.pushReplacement(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            DepartmentSelectionScreen(
-                                                user: user),
+                          onPressed: _isSigningIn ? null : _signIn,
+                          child: _isSigningIn
+                              ? Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
                                       ),
-                                    );
-                                  } else {
-                                    bool isAdmin = await authProvider.isAdmin();
-                                    Navigator.pushReplacement(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => isAdmin
-                                            ? const AdminDashboard()
-                                            : const UserHomeScreen(),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      l.signingIn,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
                                       ),
-                                    );
-                                  }
-                                }
-                              } else {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Failed to sign in'),
-                                    backgroundColor: Colors.red,
+                                    ),
+                                  ],
+                                )
+                              : Text(
+                                  l.signIn,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                );
-                              }
-                            }
-                          },
-                          child: const Text(
-                            'Sign In',
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                                ),
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 16),
                       Center(
                         child: TextButton(
                           onPressed: () {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const RegisterScreen(),
+                                builder: (_) => const RegisterScreen(),
                               ),
                             );
                           },
-                          child: const Text.rich(
+                          child: Text.rich(
                             TextSpan(
-                              text: "Don't have an account? ",
-                              style: TextStyle(color: Colors.grey),
+                              text: '${l.dontHaveAnAccount} ',
+                              style: const TextStyle(color: Colors.grey),
                               children: [
                                 TextSpan(
-                                  text: 'Sign Up',
-                                  style: TextStyle(color: Color(0xFF1976D2)),
+                                  text: l.signUp,
+                                  style: const TextStyle(
+                                    color: AppColors.accentBlue,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
                         ),
                       ),
+                      const SizedBox(height: 8),
+                      const Center(child: _LanguageQuickToggle()),
                     ],
                   ),
                 ),
@@ -290,9 +307,97 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // Keep the existing _showForgotPasswordDialog method as is
-  void _showForgotPasswordDialog(
-      BuildContext context, AuthProvider authProvider) {
-    // ... existing dialog code ...
+  Widget _buildHeader(AppLocalizations l) {
+    return Container(
+      width: double.infinity,
+      color: AppColors.primaryGreen,
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        children: [
+          Container(
+            width: 130,
+            height: 130,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+            ),
+            padding: const EdgeInsets.all(10),
+            child: SvgPicture.asset(
+              'assets/images/baringo_flag.svg',
+              fit: BoxFit.contain,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            l.countyGovernmentOfBaringo,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              height: 1.2,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            l.staffPerformanceMonitoringSystem,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.flagGold,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              l.deliverAsOne,
+              style: const TextStyle(
+                color: AppColors.flagBrown,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LanguageQuickToggle extends StatelessWidget {
+  const _LanguageQuickToggle();
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final localeProvider = context.watch<LocaleProvider>();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextButton(
+          onPressed: () =>
+              context.read<LocaleProvider>().setLocale(const Locale('en')),
+          style: TextButton.styleFrom(
+            foregroundColor: localeProvider.locale.languageCode == 'en'
+                ? AppColors.primaryGreen
+                : Colors.grey,
+          ),
+          child: Text(l.english),
+        ),
+        const Text('|', style: TextStyle(color: Colors.grey)),
+        TextButton(
+          onPressed: () =>
+              context.read<LocaleProvider>().setLocale(const Locale('sw')),
+          style: TextButton.styleFrom(
+            foregroundColor: localeProvider.locale.languageCode == 'sw'
+                ? AppColors.primaryGreen
+                : Colors.grey,
+          ),
+          child: Text(l.swahili),
+        ),
+      ],
+    );
   }
 }

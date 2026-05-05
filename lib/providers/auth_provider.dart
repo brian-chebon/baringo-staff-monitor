@@ -1,65 +1,61 @@
-// File: lib/providers/auth_provider.dart
-import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:staff_performance_mapping/models/user_model.dart';
-import 'package:staff_performance_mapping/services/auth_service.dart';
-import 'package:staff_performance_mapping/services/database_service.dart';
+import 'package:flutter/foundation.dart';
+
+import '../models/user_model.dart';
+import '../services/auth_service.dart';
+import '../services/database_service.dart';
 
 class AuthProvider with ChangeNotifier {
-  final AuthService _authService = AuthService();
-  final DatabaseService _databaseService = DatabaseService();
+  AuthProvider({AuthService? authService, DatabaseService? databaseService})
+      : _authService = authService ?? AuthService(),
+        _databaseService = databaseService ?? DatabaseService();
 
-  User? get currentUser => _authService.getCurrentUser();
+  final AuthService _authService;
+  final DatabaseService _databaseService;
+
+  User? get firebaseUser => _authService.getCurrentUser();
+
+  /// Backwards-compatible alias used by older screens.
+  User? get currentUser => firebaseUser;
 
   Stream<User?> authStateChanges() => _authService.user;
 
-  Future<bool> signUp(UserModel user, String password) async {
-    try {
-      final result = await _authService.signUp(user, password);
-      if (result != null) {
-        await _databaseService.createUser(user.copyWith(id: result.user!.uid));
-        return true;
-      }
-      return false;
-    } catch (e) {
-      print(e.toString());
-      return false;
-    }
+  /// Signs the user up. The profile document is written by [AuthService] so
+  /// there is exactly one Firestore write.
+  Future<void> signUp(UserModel user, String password) async {
+    await _authService.signUp(user, password);
+    notifyListeners();
   }
 
-  Future<bool> signIn(String email, String password) async {
-    try {
-      final result = await _authService.signIn(email, password);
-      return result != null;
-    } catch (e) {
-      print(e.toString());
-      return false;
-    }
+  Future<void> signIn(String email, String password) async {
+    await _authService.signIn(email, password);
+    notifyListeners();
   }
 
   Future<void> signOut() async {
     await _authService.signOut();
+    notifyListeners();
   }
 
+  /// Single source of truth for the admin check. Falls back to `false` if the
+  /// user document is unavailable (e.g. signed out, network error).
   Future<bool> isAdmin() async {
-    if (currentUser == null) return false;
-    final user = await _databaseService.getUserById(currentUser!.uid);
-    return user?.isAdmin ?? false;
+    final user = firebaseUser;
+    if (user == null) return false;
+    return _databaseService.isUserAdmin(user.uid);
   }
 
-  Future<UserModel?> getCurrentUser() async {
-    if (currentUser == null) return null;
-    return await _databaseService.getUserById(currentUser!.uid);
+  Future<UserModel?> getCurrentUserProfile() async {
+    final user = firebaseUser;
+    if (user == null) return null;
+    return _databaseService.getUserById(user.uid);
   }
 
-  Future<void> resetPassword(String email) async {
-    try {
-      await _authService.resetPassword(email);
-    } catch (e) {
-      print(e.toString());
-      throw Exception('Failed to send password reset email');
-    }
-  }
+  /// Kept for source compatibility; new code should use [getCurrentUserProfile].
+  Future<UserModel?> getCurrentUser() => getCurrentUserProfile();
+
+  Future<void> resetPassword(String email) =>
+      _authService.resetPassword(email);
 
   Future<void> updateUserProfile(UserModel user) async {
     await _databaseService.updateUserProfile(user);
