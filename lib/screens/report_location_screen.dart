@@ -1,12 +1,12 @@
-// File: lib/screens/report_location_screen.dart
 import 'package:flutter/material.dart';
-import 'package:staff_performance_mapping/services/location_service.dart';
+
+import '../services/location_service.dart';
 
 class ReportLocationScreen extends StatefulWidget {
-  const ReportLocationScreen({Key? key}) : super(key: key);
+  const ReportLocationScreen({super.key});
 
   @override
-  _ReportLocationScreenState createState() => _ReportLocationScreenState();
+  State<ReportLocationScreen> createState() => _ReportLocationScreenState();
 }
 
 class _ReportLocationScreenState extends State<ReportLocationScreen> {
@@ -22,18 +22,24 @@ class _ReportLocationScreenState extends State<ReportLocationScreen> {
   }
 
   Future<void> _getCurrentLocation() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
     try {
       final position = await _locationService.getCurrentPosition();
-      final locationInfo = await _locationService.getLocationInfo();
+      final info = await _locationService.getLocationInfo();
+      if (!mounted) return;
       setState(() {
         _locationInfo = 'Latitude: ${position.latitude}\n'
             'Longitude: ${position.longitude}\n'
-            'IP: ${locationInfo.ip}\n'
-            'Country: ${locationInfo.country}\n'
-            'City: ${locationInfo.city}';
+            'IP: ${info.ip}\n'
+            'Country: ${info.country}\n'
+            'City: ${info.city}';
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage = 'Failed to get location: $e';
         _isLoading = false;
@@ -44,9 +50,7 @@ class _ReportLocationScreenState extends State<ReportLocationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Report Location'),
-      ),
+      appBar: AppBar(title: const Text('Report Location')),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _errorMessage != null
@@ -63,13 +67,7 @@ class _ReportLocationScreenState extends State<ReportLocationScreen> {
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton(
-                          onPressed: () {
-                            setState(() {
-                              _isLoading = true;
-                              _errorMessage = null;
-                            });
-                            _getCurrentLocation();
-                          },
+                          onPressed: _getCurrentLocation,
                           child: const Text('Retry'),
                         ),
                       ],

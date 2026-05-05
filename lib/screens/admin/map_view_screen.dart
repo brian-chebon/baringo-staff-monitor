@@ -1,71 +1,63 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:staff_performance_mapping/models/work_report_model.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../../models/work_report_model.dart';
 
 class MapViewScreen extends StatefulWidget {
   final WorkReportModel report;
 
-  const MapViewScreen({Key? key, required this.report}) : super(key: key);
+  const MapViewScreen({super.key, required this.report});
 
   @override
   State<MapViewScreen> createState() => _MapViewScreenState();
 }
 
 class _MapViewScreenState extends State<MapViewScreen> {
-  GoogleMapController? mapController;
-  LatLng? reportLocation;
+  GoogleMapController? _controller;
+  LatLng? _reportLocation;
 
   @override
   void initState() {
     super.initState();
-    _initializeLocation();
+    final geo = widget.report.geoLocation;
+    if (geo != null) {
+      _reportLocation = LatLng(geo.latitude, geo.longitude);
+    }
   }
 
-  void _initializeLocation() {
-    if (widget.report.geoLocation != null) {
-      GeoPoint geoPoint = widget.report.geoLocation!;
-      reportLocation = LatLng(geoPoint.latitude, geoPoint.longitude);
-    }
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Report Location')),
-      body: _buildBody(),
+      body: _reportLocation == null
+          ? _error('No GPS location was recorded with this report.')
+          : GoogleMap(
+              onMapCreated: (c) => _controller = c,
+              initialCameraPosition: CameraPosition(
+                target: _reportLocation!,
+                zoom: 15,
+              ),
+              markers: {
+                Marker(
+                  markerId: const MarkerId('reportLocation'),
+                  position: _reportLocation!,
+                  infoWindow: InfoWindow(
+                    title: widget.report.task,
+                    snippet: widget.report.location,
+                  ),
+                ),
+              },
+            ),
     );
   }
 
-  Widget _buildBody() {
-    if (reportLocation == null) {
-      return _buildErrorWidget('Error: Invalid location data.');
-    }
-
-    return GoogleMap(
-      onMapCreated: (GoogleMapController controller) {
-        setState(() {
-          mapController = controller;
-        });
-      },
-      initialCameraPosition: CameraPosition(
-        target: reportLocation!,
-        zoom: 15,
-      ),
-      markers: {
-        Marker(
-          markerId: const MarkerId('reportLocation'),
-          position: reportLocation!,
-          infoWindow: InfoWindow(
-            title: widget.report.task,
-            snippet: widget.report.location,
-          ),
-        ),
-      },
-    );
-  }
-
-  Widget _buildErrorWidget(String message) {
+  Widget _error(String message) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -73,7 +65,7 @@ class _MapViewScreenState extends State<MapViewScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(Icons.error_outline, color: Colors.red, size: 48),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             Text(
               message,
               style: const TextStyle(color: Colors.red),
@@ -85,3 +77,4 @@ class _MapViewScreenState extends State<MapViewScreen> {
     );
   }
 }
+

@@ -1,336 +1,284 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:staff_performance_mapping/models/user_model.dart';
-import 'package:staff_performance_mapping/models/work_report_model.dart';
-import 'package:staff_performance_mapping/providers/auth_provider.dart';
-import 'package:staff_performance_mapping/services/database_service.dart';
-import 'package:staff_performance_mapping/screens/admin/user_details_screen.dart';
+import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+
+import '../../constants/app_theme.dart';
+import '../../constants/baringo_data.dart';
+import '../../models/user_model.dart';
+import '../../models/work_report_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/database_service.dart';
+import '../about_screen.dart';
+import 'map_view_screen.dart';
+import 'user_details_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
-  const AdminDashboard({Key? key}) : super(key: key);
+  const AdminDashboard({super.key});
 
   @override
-  AdminDashboardState createState() => AdminDashboardState();
+  State<AdminDashboard> createState() => _AdminDashboardState();
 }
 
-class AdminDashboardState extends State<AdminDashboard>
+class _AdminDashboardState extends State<AdminDashboard>
     with SingleTickerProviderStateMixin {
   final DatabaseService _databaseService = DatabaseService();
-  late TabController _tabController;
+  late final TabController _tabController;
+
   String _selectedDepartment = 'All';
-  DateTimeRange? _selectedDateRange;
+  late DateTimeRange _selectedDateRange;
   Map<String, UserModel> _userMap = {};
 
-  final List<String> _departments = [
-    'All',
-    'Agriculture, Livestock, and Fisheries Development',
-    'Education and Vocational Training',
-    'Finance and Economic Planning',
-    'Industry, Commerce, Tourism, Cooperatives, and Enterprise Development',
-    'Lands, Housing, and Urban Development',
-    'Roads, Transport, Public Works, and Infrastructure Development',
-    'Water, Irrigation, Environment, Natural Resources, and Mining',
-    'Youth Affairs, Sports, Gender, Culture, and Social Services',
-    'Health Services',
-    'Devolution, Public Service, and Administration'
-  ];
+  static const _allDepartments = 'All';
+  static List<String> get _departmentFilters =>
+      [_allDepartments, ...BaringoData.departments];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _loadUsers();
     _selectedDateRange = DateTimeRange(
       start: DateTime.now().subtract(const Duration(days: 30)),
       end: DateTime.now(),
     );
+    _loadUsers();
   }
 
-  void _loadUsers() async {
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadUsers() async {
     final users = await _databaseService.getAllUsersOnce();
-    setState(() {
-      _userMap = {for (var user in users) user.id: user};
-    });
-  }
-
-  // Add this method near other navigation methods
-  void _navigateToUserDetails(String userId) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => UserDetailsScreen(userId: userId),
-      ),
-    );
+    if (!mounted) return;
+    setState(() => _userMap = {for (final u in users) u.id: u});
   }
 
   Future<void> _selectDateRange() async {
-    final DateTimeRange? picked = await showDateRangePicker(
+    final picked = await showDateRangePicker(
       context: context,
       firstDate: DateTime(2020),
       lastDate: DateTime.now(),
       initialDateRange: _selectedDateRange,
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF1B5E20), // Dark green
-              onPrimary: Colors.white,
-              surface: Colors.white,
-              onSurface: Colors.black,
-            ),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: AppColors.primaryGreen,
+            onPrimary: Colors.white,
           ),
-          child: child!,
-        );
-      },
+        ),
+        child: child!,
+      ),
     );
-    if (picked != null) {
-      setState(() {
-        _selectedDateRange = picked;
-      });
-    }
+    if (picked != null) setState(() => _selectedDateRange = picked);
+  }
+
+  bool _matchesFilters(WorkReportModel report) {
+    final deptOk = _selectedDepartment == _allDepartments ||
+        report.department == _selectedDepartment;
+    final start = _selectedDateRange.start;
+    final endInclusive = _selectedDateRange.end.add(const Duration(days: 1));
+    final dateOk = !report.date.isBefore(start) && report.date.isBefore(endInclusive);
+    return deptOk && dateOk;
   }
 
   Future<void> _printUsers(List<UserModel> users) async {
     final pdf = pw.Document();
-
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(40),
         header: (context) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
             pw.Text(
               'BARINGO COUNTY GOVERNMENT',
-              style: pw.TextStyle(
-                fontSize: 20,
-                fontWeight: pw.FontWeight.bold,
-              ),
+              style:
+                  pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
             ),
-            pw.SizedBox(height: 10),
+            pw.SizedBox(height: 8),
             pw.Text(
-              'STAFF PERFORMANCE MAPPING - USERS LIST',
-              style: pw.TextStyle(
-                fontSize: 16,
-                fontWeight: pw.FontWeight.bold,
-              ),
+              'STAFF PERFORMANCE MAPPING — USERS LIST',
+              style:
+                  pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
             ),
-            pw.SizedBox(height: 20),
+            pw.SizedBox(height: 16),
           ],
         ),
         build: (context) => [
-          pw.Table.fromTextArray(
+          pw.TableHelper.fromTextArray(
             cellPadding: const pw.EdgeInsets.all(6),
-            headerDecoration: pw.BoxDecoration(
-              color: PdfColors.grey300,
-            ),
-            headerStyle: pw.TextStyle(
-              fontWeight: pw.FontWeight.bold,
-              fontSize: 12,
-            ),
-            cellStyle: const pw.TextStyle(
-              fontSize: 11,
-            ),
-            headers: [
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+            headerStyle:
+                pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
+            cellStyle: const pw.TextStyle(fontSize: 10),
+            headers: const [
               'Name',
               'Department',
               'Sub-County',
               'Email',
-              'Phone Number'
+              'Phone',
             ],
             data: users
-                .map((user) => [
-                      '${user.firstName} ${user.middleName} ${user.surname}',
-                      user.department,
-                      user.subCounty,
-                      user.email,
-                      user.phoneNumber,
+                .map((u) => [
+                      '${u.firstName} ${u.middleName} ${u.surname}',
+                      u.department,
+                      u.subCounty,
+                      u.email,
+                      u.phoneNumber,
                     ])
                 .toList(),
           ),
         ],
-        footer: (context) => pw.Column(
+        footer: (context) => pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.end,
           children: [
-            pw.Divider(),
-            pw.SizedBox(height: 10),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text('Name: _________________'),
-                pw.Text('Date: _________________'),
-                pw.Text('Sign: _________________'),
-              ],
-            ),
-            pw.SizedBox(height: 10),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.end,
-              children: [
-                pw.Text(
-                  'Page ${context.pageNumber} of ${context.pagesCount}',
-                  style: const pw.TextStyle(fontSize: 12),
-                ),
-              ],
+            pw.Text(
+              'Page ${context.pageNumber}/${context.pagesCount}',
+              style: const pw.TextStyle(fontSize: 10),
             ),
           ],
         ),
       ),
     );
-
     await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
+      onLayout: (_) async => pdf.save(),
       name: 'users_list.pdf',
     );
   }
 
   Future<void> _printTasks(List<WorkReportModel> reports) async {
     final pdf = pw.Document();
-
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4.landscape,
         margin: const pw.EdgeInsets.all(40),
         header: (context) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.center,
           children: [
             pw.Text(
               'BARINGO COUNTY GOVERNMENT',
-              style: pw.TextStyle(
-                fontSize: 20,
-                fontWeight: pw.FontWeight.bold,
-              ),
+              style:
+                  pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold),
             ),
-            pw.SizedBox(height: 10),
+            pw.SizedBox(height: 8),
             pw.Text(
-              'STAFF PERFORMANCE MAPPING - TASK REPORTS',
-              style: pw.TextStyle(
-                fontSize: 16,
-                fontWeight: pw.FontWeight.bold,
-              ),
+              'STAFF PERFORMANCE MAPPING — TASK REPORTS',
+              style:
+                  pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold),
             ),
-            if (_selectedDateRange != null)
-              pw.Text(
-                'Period: ${DateFormat('dd/MM/yyyy').format(_selectedDateRange!.start)} - ${DateFormat('dd/MM/yyyy').format(_selectedDateRange!.end)}',
-                style: const pw.TextStyle(fontSize: 12),
-              ),
-            pw.SizedBox(height: 20),
+            pw.Text(
+              'Period: ${DateFormat('dd/MM/yyyy').format(_selectedDateRange.start)} '
+              '– ${DateFormat('dd/MM/yyyy').format(_selectedDateRange.end)}'
+              '   |   Department: $_selectedDepartment',
+              style: const pw.TextStyle(fontSize: 10),
+            ),
+            pw.SizedBox(height: 16),
           ],
         ),
         build: (context) => [
-          pw.Table.fromTextArray(
+          pw.TableHelper.fromTextArray(
             cellPadding: const pw.EdgeInsets.all(6),
-            headerDecoration: pw.BoxDecoration(
-              color: PdfColors.grey300,
-            ),
-            headerStyle: pw.TextStyle(
-              fontWeight: pw.FontWeight.bold,
-              fontSize: 10,
-            ),
-            cellStyle: const pw.TextStyle(
-              fontSize: 9,
-            ),
-            headers: [
-              'User Name',
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey300),
+            headerStyle:
+                pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            headers: const [
+              'Staff',
               'Department',
               'Task',
               'Location',
-              'Male',
-              'Female',
+              'M',
+              'F',
+              'Total',
               'Description',
               'Remarks',
-              'Date & Time'
+              'Date',
             ],
-            data: reports.map((report) {
-              final user = _userMap[report.userId];
-              final userName = user != null
-                  ? '${user.firstName} ${user.middleName} ${user.surname}'
-                  : 'Unknown User';
+            data: reports.map((r) {
+              final user = _userMap[r.userId];
+              final name = user == null
+                  ? 'Unknown'
+                  : '${user.firstName} ${user.middleName} ${user.surname}';
               return [
-                userName,
-                report.department,
-                report.task,
-                report.location,
-                report.maleAttendance.toString(),
-                report.femaleAttendance.toString(),
-                report.description,
-                report.remarks,
-                DateFormat('dd/MM/yyyy HH:mm').format(report.date),
+                name,
+                r.department,
+                r.task,
+                r.location,
+                r.maleAttendance.toString(),
+                r.femaleAttendance.toString(),
+                r.totalAttendance.toString(),
+                r.description,
+                r.remarks,
+                DateFormat('dd/MM/yyyy HH:mm').format(r.date),
               ];
             }).toList(),
           ),
         ],
-        footer: (context) => pw.Column(
-          children: [
-            pw.Divider(),
-            pw.SizedBox(height: 10),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text('Name: _________________'),
-                pw.Text('Date: _________________'),
-                pw.Text('Sign: _________________'),
-              ],
-            ),
-            pw.SizedBox(height: 10),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.end,
-              children: [
-                pw.Text(
-                  'Page ${context.pageNumber} of ${context.pagesCount}',
-                  style: const pw.TextStyle(fontSize: 12),
-                ),
-              ],
-            ),
-          ],
-        ),
       ),
     );
-
     await Printing.layoutPdf(
-      onLayout: (format) async => pdf.save(),
+      onLayout: (_) async => pdf.save(),
       name: 'tasks_list.pdf',
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
+    final authProvider = context.read<AuthProvider>();
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Admin Dashboard'),
-        backgroundColor: const Color(0xFF1B5E20),
-        foregroundColor: Colors.white,
         actions: [
           IconButton(
             icon: const Icon(Icons.print),
-            onPressed: () {
+            tooltip: 'Print current view',
+            onPressed: () async {
+              final messenger = ScaffoldMessenger.of(context);
               if (_tabController.index == 0) {
-                _databaseService
-                    .getAllUsersOnce()
-                    .then((users) => _printUsers(users));
+                final users = await _databaseService.getAllUsersOnce();
+                await _printUsers(users);
               } else {
-                _databaseService
-                    .getAllWorkReportsOnce()
-                    .then((reports) => _printTasks(reports));
+                final reports =
+                    await _databaseService.getAllWorkReportsOnce();
+                final filtered = reports.where(_matchesFilters).toList();
+                if (filtered.isEmpty) {
+                  messenger.showSnackBar(const SnackBar(
+                    content: Text('No tasks match the current filters.'),
+                  ));
+                  return;
+                }
+                await _printTasks(filtered);
               }
             },
-            tooltip: 'Print current list',
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh',
+            onPressed: _loadUsers,
+          ),
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            tooltip: 'About',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AboutScreen()),
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.exit_to_app),
-            onPressed: () => authProvider.signOut(),
+            tooltip: 'Logout',
+            onPressed: authProvider.signOut,
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.white,
-          labelColor: Colors.white, // Add this line for selected tab text color
-          unselectedLabelColor:
-              Colors.white70, // Add this line for unselected tab text color
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white70,
           tabs: const [
             Tab(text: 'Users'),
             Tab(text: 'Tasks'),
@@ -354,14 +302,10 @@ class AdminDashboardState extends State<AdminDashboard>
 
   Widget _buildFilters() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.grey[100],
-        border: Border(
-          bottom: BorderSide(
-            color: Colors.grey[300]!,
-          ),
-        ),
+        border: Border(bottom: BorderSide(color: Colors.grey[300]!)),
       ),
       child: Row(
         children: [
@@ -370,34 +314,22 @@ class AdminDashboardState extends State<AdminDashboard>
               value: _selectedDepartment,
               isExpanded: true,
               hint: const Text('Select Department'),
-              items: _departments.map((String value) {
-                return DropdownMenuItem<String>(
-                  value: value,
-                  child: Text(
-                    value,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                );
-              }).toList(),
-              onChanged: (String? newValue) {
-                setState(() {
-                  _selectedDepartment = newValue!;
-                });
-              },
+              items: _departmentFilters
+                  .map((d) => DropdownMenuItem(
+                        value: d,
+                        child: Text(d, overflow: TextOverflow.ellipsis),
+                      ))
+                  .toList(),
+              onChanged: (v) => setState(() => _selectedDepartment = v ?? 'All'),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           ElevatedButton.icon(
             onPressed: _selectDateRange,
             icon: const Icon(Icons.date_range),
             label: Text(
-              _selectedDateRange != null
-                  ? '${DateFormat('dd/MM/yyyy').format(_selectedDateRange!.start)} - ${DateFormat('dd/MM/yyyy').format(_selectedDateRange!.end)}'
-                  : 'Select Date Range',
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1B5E20),
-              foregroundColor: Colors.white,
+              '${DateFormat('dd/MM/yyyy').format(_selectedDateRange.start)} – '
+              '${DateFormat('dd/MM/yyyy').format(_selectedDateRange.end)}',
             ),
           ),
         ],
@@ -415,11 +347,10 @@ class AdminDashboardState extends State<AdminDashboard>
         if (snapshot.hasError) {
           return Center(child: Text('Error: ${snapshot.error}'));
         }
-        final users = snapshot.data ?? [];
+        final users = snapshot.data ?? const [];
         if (users.isEmpty) {
           return const Center(child: Text('No users available.'));
         }
-
         return SingleChildScrollView(
           scrollDirection: Axis.vertical,
           child: SingleChildScrollView(
@@ -431,14 +362,13 @@ class AdminDashboardState extends State<AdminDashboard>
                 borderRadius: BorderRadius.circular(8),
               ),
               child: DataTable(
-                headingRowColor: MaterialStateProperty.all(
-                  const Color(0xFFF5F5F5),
-                ),
-                columnSpacing: 40,
-                horizontalMargin: 20,
+                headingRowColor:
+                    WidgetStateProperty.all(const Color(0xFFF5F5F5)),
+                columnSpacing: 32,
+                horizontalMargin: 16,
                 headingTextStyle: const TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1B5E20),
+                  color: AppColors.primaryGreen,
                 ),
                 columns: const [
                   DataColumn(label: Text('Name')),
@@ -448,38 +378,32 @@ class AdminDashboardState extends State<AdminDashboard>
                   DataColumn(label: Text('Phone Number')),
                   DataColumn(label: Text('Actions')),
                 ],
-                rows: users.map((user) {
+                rows: users.map((u) {
                   return DataRow(
                     cells: [
-                      DataCell(
-                        Text(
-                            '${user.firstName} ${user.middleName} ${user.surname}'),
-                      ),
-                      DataCell(Text(user.department)),
-                      DataCell(Text(user.subCounty)),
-                      DataCell(Text(user.email)),
-                      DataCell(Text(user.phoneNumber)),
-                      DataCell(
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.visibility,
-                                  color: Color(0xFF1976D2)),
-                              onPressed: () => _navigateToUserDetails(user.id),
-                              tooltip: 'View Details',
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.map,
-                                  color: Color(0xFF1B5E20)),
-                              onPressed: () {
-                                // TODO: Implement map view for user's latest location
-                              },
-                              tooltip: 'View Location',
-                            ),
-                          ],
+                      DataCell(Text(
+                        '${u.firstName} ${u.middleName} ${u.surname}',
+                      )),
+                      DataCell(Text(u.department)),
+                      DataCell(Text(u.subCounty)),
+                      DataCell(Text(u.email)),
+                      DataCell(Text(u.phoneNumber)),
+                      DataCell(IconButton(
+                        icon: const Icon(
+                          Icons.visibility,
+                          color: AppColors.accentBlue,
                         ),
-                      ),
+                        tooltip: 'View Details',
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  UserDetailsScreen(userId: u.id),
+                            ),
+                          );
+                        },
+                      )),
                     ],
                   );
                 }).toList(),
@@ -501,28 +425,13 @@ class AdminDashboardState extends State<AdminDashboard>
         if (snapshot.hasError) {
           return Center(child: Text('Error: ${snapshot.error}'));
         }
-
-        final allReports = snapshot.data ?? [];
-        final filteredReports = allReports.where((report) {
-          bool departmentMatch = _selectedDepartment == 'All' ||
-              report.department == _selectedDepartment;
-
-          bool dateMatch = true;
-          if (_selectedDateRange != null) {
-            dateMatch = report.date.isAfter(_selectedDateRange!.start) &&
-                report.date.isBefore(
-                    _selectedDateRange!.end.add(const Duration(days: 1)));
-          }
-
-          return departmentMatch && dateMatch;
-        }).toList();
-
-        if (filteredReports.isEmpty) {
+        final filtered =
+            (snapshot.data ?? const <WorkReportModel>[]).where(_matchesFilters).toList();
+        if (filtered.isEmpty) {
           return const Center(
             child: Text('No tasks available for the selected criteria.'),
           );
         }
-
         return SingleChildScrollView(
           scrollDirection: Axis.vertical,
           child: SingleChildScrollView(
@@ -534,89 +443,88 @@ class AdminDashboardState extends State<AdminDashboard>
                 borderRadius: BorderRadius.circular(8),
               ),
               child: DataTable(
-                headingRowColor: MaterialStateProperty.all(
-                  const Color(0xFFF5F5F5),
-                ),
-                columnSpacing: 40,
-                horizontalMargin: 20,
+                headingRowColor:
+                    WidgetStateProperty.all(const Color(0xFFF5F5F5)),
+                columnSpacing: 32,
+                horizontalMargin: 16,
                 headingTextStyle: const TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1B5E20),
+                  color: AppColors.primaryGreen,
                 ),
                 columns: const [
                   DataColumn(label: Text('User Name')),
                   DataColumn(label: Text('Department')),
                   DataColumn(label: Text('Task')),
                   DataColumn(label: Text('Location')),
-                  DataColumn(label: Text('Male')),
-                  DataColumn(label: Text('Female')),
+                  DataColumn(label: Text('M')),
+                  DataColumn(label: Text('F')),
                   DataColumn(label: Text('Total')),
                   DataColumn(label: Text('Description')),
                   DataColumn(label: Text('Remarks')),
                   DataColumn(label: Text('Date & Time')),
                   DataColumn(label: Text('Actions')),
                 ],
-                rows: filteredReports.map((report) {
-                  final user = _userMap[report.userId];
-                  final userName = user != null
-                      ? '${user.firstName} ${user.middleName} ${user.surname}'
-                      : 'Unknown User';
-
+                rows: filtered.map((r) {
+                  final user = _userMap[r.userId];
+                  final name = user == null
+                      ? 'Unknown User'
+                      : '${user.firstName} ${user.middleName} ${user.surname}';
                   return DataRow(
                     cells: [
-                      DataCell(Text(userName)),
-                      DataCell(Text(report.department)),
-                      DataCell(Text(report.task)),
-                      DataCell(Text(report.location)),
-                      DataCell(Text(report.maleAttendance.toString())),
-                      DataCell(Text(report.femaleAttendance.toString())),
+                      DataCell(Text(name)),
+                      DataCell(Text(r.department)),
+                      DataCell(Text(r.task)),
+                      DataCell(Text(r.location)),
+                      DataCell(Text(r.maleAttendance.toString())),
+                      DataCell(Text(r.femaleAttendance.toString())),
+                      DataCell(Text(r.totalAttendance.toString())),
+                      DataCell(SizedBox(
+                        width: 200,
+                        child: Text(
+                          r.description,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      )),
+                      DataCell(SizedBox(
+                        width: 200,
+                        child: Text(
+                          r.remarks,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      )),
                       DataCell(Text(
-                          (report.maleAttendance + report.femaleAttendance)
-                              .toString())),
-                      DataCell(
-                        SizedBox(
-                          width: 200,
-                          child: Text(
-                            report.description,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                      DataCell(
-                        SizedBox(
-                          width: 200,
-                          child: Text(
-                            report.remarks,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                      DataCell(
-                        Text(
-                            DateFormat('dd/MM/yyyy HH:mm').format(report.date)),
-                      ),
-                      DataCell(
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.visibility,
-                                  color: Color(0xFF1976D2)),
-                              onPressed: () => _showTaskDetails(report),
-                              tooltip: 'View Details',
+                        DateFormat('dd/MM/yyyy HH:mm').format(r.date),
+                      )),
+                      DataCell(Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(
+                              Icons.visibility,
+                              color: AppColors.accentBlue,
                             ),
-                            if (report.geoLocation != null)
-                              IconButton(
-                                icon: const Icon(Icons.map,
-                                    color: Color(0xFF1B5E20)),
-                                onPressed: () {
-                                  // TODO: Implement map view for task location
-                                },
-                                tooltip: 'View on Map',
+                            tooltip: 'View Details',
+                            onPressed: () => _showTaskDetails(r),
+                          ),
+                          if (r.geoLocation != null)
+                            IconButton(
+                              icon: const Icon(
+                                Icons.map,
+                                color: AppColors.primaryGreen,
                               ),
-                          ],
-                        ),
-                      ),
+                              tooltip: 'View on Map',
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        MapViewScreen(report: r),
+                                  ),
+                                );
+                              },
+                            ),
+                        ],
+                      )),
                     ],
                   );
                 }).toList(),
@@ -630,208 +538,174 @@ class AdminDashboardState extends State<AdminDashboard>
 
   void _showTaskDetails(WorkReportModel report) {
     final user = _userMap[report.userId];
-    final userName = user != null
-        ? '${user.firstName} ${user.middleName} ${user.surname}'
-        : 'Unknown User';
+    final userName = user == null
+        ? 'Unknown User'
+        : '${user.firstName} ${user.middleName} ${user.surname}';
 
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+      builder: (ctx) => Dialog(
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: 500,
+            maxHeight: MediaQuery.of(ctx).size.height * 0.8,
           ),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: 500,
-              maxHeight: MediaQuery.of(context).size.height * 0.8,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: const BoxDecoration(
-                    borderRadius:
-                        BorderRadius.vertical(top: Radius.circular(16)),
-                    color: Color(0xFF1B5E20),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Task Details',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
-                  ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: const BoxDecoration(
+                  borderRadius:
+                      BorderRadius.vertical(top: Radius.circular(16)),
+                  color: AppColors.primaryGreen,
                 ),
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildDetailSection(
-                            'User Information',
-                            [
-                              _buildDetailRow('Name', userName),
-                              _buildDetailRow('Department', report.department),
-                            ],
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Task Details',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _section('User Information', [
+                          _detail('Name', userName),
+                          _detail('Department', report.department),
+                        ]),
+                        const SizedBox(height: 12),
+                        _section('Task Information', [
+                          _detail('Task', report.task),
+                          _detail('Location', report.location),
+                          _detail(
+                            'Date & Time',
+                            DateFormat('dd/MM/yyyy HH:mm').format(report.date),
                           ),
-                          const SizedBox(height: 16),
-                          _buildDetailSection(
-                            'Task Information',
-                            [
-                              _buildDetailRow('Task', report.task),
-                              _buildDetailRow('Location', report.location),
-                              _buildDetailRow(
-                                'Date & Time',
-                                DateFormat('dd/MM/yyyy HH:mm')
-                                    .format(report.date),
+                        ]),
+                        const SizedBox(height: 12),
+                        _section('Attendance', [
+                          _detail('Male', report.maleAttendance.toString()),
+                          _detail('Female', report.femaleAttendance.toString()),
+                          _detail('Youth', report.youthAttendance.toString()),
+                          _detail('Total', report.totalAttendance.toString()),
+                        ]),
+                        const SizedBox(height: 12),
+                        _section('Additional Information', [
+                          _detail('Description', report.description),
+                          _detail('Remarks', report.remarks),
+                        ]),
+                        if (report.geoLocation != null) ...[
+                          const SizedBox(height: 12),
+                          _section('Location Details', [
+                            _detail(
+                              'Coordinates',
+                              '${report.geoLocation!.latitude}, '
+                                  '${report.geoLocation!.longitude}',
+                            ),
+                            _detail('IP Address', report.ip),
+                            _detail('Country', report.country),
+                            _detail('City', report.city),
+                          ]),
+                        ],
+                        const SizedBox(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            if (report.geoLocation != null)
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.map),
+                                label: const Text('View on Map'),
+                                onPressed: () {
+                                  Navigator.pop(ctx);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          MapViewScreen(report: report),
+                                    ),
+                                  );
+                                },
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          _buildDetailSection(
-                            'Attendance',
-                            [
-                              _buildDetailRow(
-                                'Male Attendance',
-                                report.maleAttendance.toString(),
-                              ),
-                              _buildDetailRow(
-                                'Female Attendance',
-                                report.femaleAttendance.toString(),
-                              ),
-                              _buildDetailRow(
-                                'Total Attendance',
-                                (report.maleAttendance +
-                                        report.femaleAttendance)
-                                    .toString(),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          _buildDetailSection(
-                            'Additional Information',
-                            [
-                              _buildDetailRow(
-                                  'Description', report.description),
-                              _buildDetailRow('Remarks', report.remarks),
-                            ],
-                          ),
-                          if (report.geoLocation != null) ...[
-                            const SizedBox(height: 16),
-                            _buildDetailSection(
-                              'Location Details',
-                              [
-                                _buildDetailRow(
-                                  'Coordinates',
-                                  '${report.geoLocation!.latitude}, ${report.geoLocation!.longitude}',
-                                ),
-                                _buildDetailRow('IP Address', report.ip),
-                                _buildDetailRow('Country', report.country),
-                                _buildDetailRow('City', report.city),
-                              ],
+                            const SizedBox(width: 8),
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('Close'),
                             ),
                           ],
-                          const SizedBox(height: 24),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              if (report.geoLocation != null)
-                                ElevatedButton.icon(
-                                  icon: const Icon(Icons.map),
-                                  label: const Text('View on Map'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF1B5E20),
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  onPressed: () {
-                                    // TODO: Implement map view
-                                    Navigator.of(context).pop();
-                                  },
-                                ),
-                              const SizedBox(width: 8),
-                              TextButton(
-                                onPressed: () => Navigator.of(context).pop(),
-                                child: const Text('Close'),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
-  Widget _buildDetailSection(String title, List<Widget> children) {
+  Widget _section(String title, List<Widget> children) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
           style: const TextStyle(
-            fontSize: 18,
+            fontSize: 16,
             fontWeight: FontWeight.bold,
-            color: Color(0xFF1B5E20),
+            color: AppColors.primaryGreen,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: Colors.grey[50],
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: Colors.grey[200]!),
           ),
-          child: Column(
-            children: children,
-          ),
+          child: Column(children: children),
         ),
       ],
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
+  Widget _detail(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 120,
+            width: 110,
             child: Text(
               '$label:',
               style: const TextStyle(
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF1B5E20),
+                color: AppColors.primaryGreen,
               ),
             ),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(color: Colors.black87),
-            ),
-          ),
+          Expanded(child: Text(value)),
         ],
       ),
     );

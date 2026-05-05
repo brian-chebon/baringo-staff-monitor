@@ -1,26 +1,27 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:staff_performance_mapping/models/user_model.dart';
-import 'package:staff_performance_mapping/models/work_report_model.dart';
-import 'package:staff_performance_mapping/providers/auth_provider.dart';
-import 'package:staff_performance_mapping/screens/user/report_router.dart';
-import 'package:staff_performance_mapping/services/database_service.dart';
+import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+
+import '../../constants/app_theme.dart';
+import '../../models/user_model.dart';
+import '../../models/work_report_model.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/database_service.dart';
+import '../about_screen.dart';
+import 'report_router.dart';
+import 'user_profile_screen.dart';
 
 class UserHomeScreen extends StatelessWidget {
-  const UserHomeScreen({Key? key}) : super(key: key);
+  const UserHomeScreen({super.key});
 
-  static const Color primaryGreen = Color(0xFF1B5E20); // Dark green
-  static const Color secondaryGreen = Color(0xFF4CAF50); // Light green
-  static const Color accentBlue = Color(0xFF1976D2); // Blue
-  static const Color backgroundColor = Colors.white;
-  static const Color cardColor = Color(0xFFF5F5F5); // Light grey for cards
-
-  Future<void> _printReports(BuildContext context,
-      List<WorkReportModel> reports, UserModel user) async {
+  Future<void> _printReports(
+    BuildContext context,
+    List<WorkReportModel> reports,
+    UserModel user,
+  ) async {
     final pdf = pw.Document();
 
     pdf.addPage(
@@ -31,12 +32,13 @@ class UserHomeScreen extends StatelessWidget {
           children: [
             pw.Text(
               'Baringo County Government',
-              style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
+              style:
+                  pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 4),
             pw.Text(
               'Work Reports - ${user.firstName} ${user.surname}',
-              style: pw.TextStyle(fontSize: 18),
+              style: const pw.TextStyle(fontSize: 18),
             ),
             pw.Divider(),
             pw.SizedBox(height: 10),
@@ -47,15 +49,15 @@ class UserHomeScreen extends StatelessWidget {
           ],
         ),
         build: (context) => [
-          pw.Table.fromTextArray(
+          pw.TableHelper.fromTextArray(
             headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            headers: ['Task', 'Location', 'Date & Time', 'Status'],
+            headers: const ['Task', 'Location', 'Date & Time', 'Status'],
             data: reports
-                .map((report) => [
-                      report.task,
-                      report.location,
-                      DateFormat('yyyy-MM-dd HH:mm').format(report.date),
-                      'Completed'
+                .map((r) => [
+                      r.task,
+                      r.location,
+                      DateFormat('yyyy-MM-dd HH:mm').format(r.date),
+                      'Completed',
                     ])
                 .toList(),
           ),
@@ -71,81 +73,109 @@ class UserHomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = Provider.of<AuthProvider>(context);
+    final authProvider = context.watch<AuthProvider>();
     final databaseService = DatabaseService();
+    final firebaseUser = authProvider.firebaseUser;
 
     return Scaffold(
-      backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: primaryGreen,
-        elevation: 0,
         title: const Text(
           'BCG Staff Monitor',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
-          StreamBuilder<List<WorkReportModel>>(
-            stream: authProvider.currentUser != null
-                ? databaseService
-                    .getUserWorkReports(authProvider.currentUser!.uid)
-                : Stream.value([]),
-            builder: (context, reportsSnapshot) {
-              return IconButton(
-                icon: const Icon(Icons.print, color: Colors.white),
-                onPressed: reportsSnapshot.hasData &&
-                        reportsSnapshot.data!.isNotEmpty
-                    ? () async {
-                        final user = await databaseService
-                            .getUserById(authProvider.currentUser!.uid);
-                        if (user != null) {
-                          _printReports(context, reportsSnapshot.data!, user);
-                        }
-                      }
-                    : null,
-                tooltip: 'Print reports',
-              );
+          if (firebaseUser != null)
+            StreamBuilder<List<WorkReportModel>>(
+              stream: databaseService.getUserWorkReports(firebaseUser.uid),
+              builder: (context, snap) {
+                final reports = snap.data ?? const <WorkReportModel>[];
+                return IconButton(
+                  icon: const Icon(Icons.print, color: Colors.white),
+                  onPressed: reports.isEmpty
+                      ? null
+                      : () async {
+                          final user = await databaseService
+                              .getUserById(firebaseUser.uid);
+                          if (user != null && context.mounted) {
+                            _printReports(context, reports, user);
+                          }
+                        },
+                  tooltip: 'Print reports',
+                );
+              },
+            ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Colors.white),
+            onSelected: (value) async {
+              switch (value) {
+                case 'profile':
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const UserProfileScreen(),
+                    ),
+                  );
+                case 'about':
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AboutScreen()),
+                  );
+                case 'logout':
+                  await authProvider.signOut();
+              }
             },
-          ),
-          IconButton(
-            icon: const Icon(Icons.exit_to_app, color: Colors.white),
-            onPressed: () async {
-              await authProvider.signOut();
-              Navigator.of(context).pushReplacementNamed('/login');
-            },
-            tooltip: 'Logout',
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'profile',
+                child: ListTile(
+                  leading: Icon(Icons.person),
+                  title: Text('Profile'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'about',
+                child: ListTile(
+                  leading: Icon(Icons.info_outline),
+                  title: Text('About'),
+                ),
+              ),
+              PopupMenuItem(
+                value: 'logout',
+                child: ListTile(
+                  leading: Icon(Icons.exit_to_app),
+                  title: Text('Logout'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
-      body: authProvider.currentUser == null
+      body: firebaseUser == null
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.lock_outline,
-                      size: 64, color: primaryGreen.withOpacity(0.5)),
+                  Icon(
+                    Icons.lock_outline,
+                    size: 64,
+                    color: AppColors.primaryGreen.withValues(alpha: 0.5),
+                  ),
                   const SizedBox(height: 16),
                   Text(
                     'Not authenticated. Please log in.',
-                    style: TextStyle(color: primaryGreen.withOpacity(0.7)),
+                    style: TextStyle(
+                      color: AppColors.primaryGreen.withValues(alpha: 0.7),
+                    ),
                   ),
                 ],
               ),
             )
           : FutureBuilder<UserModel?>(
-              future:
-                  databaseService.getUserById(authProvider.currentUser!.uid),
+              future: databaseService.getUserById(firebaseUser.uid),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(primaryGreen),
-                    ),
-                  );
+                  return const Center(child: CircularProgressIndicator());
                 }
-
                 if (snapshot.hasError) {
                   return Center(
                     child: Text(
@@ -154,12 +184,11 @@ class UserHomeScreen extends StatelessWidget {
                     ),
                   );
                 }
-
                 final user = snapshot.data;
                 if (user == null) {
                   return const Center(
                     child: Text(
-                      'User data not found. Please try logging out and logging in again.',
+                      'User data not found. Please sign out and back in.',
                       style: TextStyle(color: Colors.red),
                     ),
                   );
@@ -170,28 +199,25 @@ class UserHomeScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        width: MediaQuery.of(context)
-                            .size
-                            .width, // Make container full width
+                        width: MediaQuery.of(context).size.width,
                         padding: const EdgeInsets.all(24),
-                        color:
-                            primaryGreen, // Remove BoxDecoration and use direct color
+                        color: AppColors.primaryGreen,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
+                            const Text(
                               'Welcome,',
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.8),
+                                color: Colors.white70,
                                 fontSize: 16,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 6),
                             Text(
                               '${user.firstName} ${user.surname}',
                               style: const TextStyle(
                                 color: Colors.white,
-                                fontSize: 24,
+                                fontSize: 22,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -204,32 +230,33 @@ class UserHomeScreen extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Card(
-                              elevation: 2,
-                              color: cardColor,
+                              elevation: 1,
+                              color: AppColors.surface,
                               child: Padding(
                                 padding: const EdgeInsets.all(16),
                                 child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
                                   children: [
                                     const Text(
                                       'Staff Information',
                                       style: TextStyle(
-                                        color: primaryGreen,
+                                        color: AppColors.primaryGreen,
                                         fontSize: 18,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
-                                    const SizedBox(height: 16),
-                                    _buildInfoRow('County', user.county),
-                                    _buildInfoRow('Sub County', user.subCounty),
-                                    _buildInfoRow('Ward', user.ward),
-                                    _buildInfoRow(
-                                        'Department', user.department),
-                                    if (user.subDepartment != null)
-                                      _buildInfoRow('Sub-Department',
-                                          user.subDepartment!),
-                                    _buildInfoRow(
-                                        'Workstation', user.workstation),
+                                    const SizedBox(height: 12),
+                                    _row('County', user.county),
+                                    _row('Sub-County', user.subCounty),
+                                    _row('Ward', user.ward),
+                                    _row('Department', user.department),
+                                    if ((user.subDepartment ?? '').isNotEmpty)
+                                      _row(
+                                        'Sub-Department',
+                                        user.subDepartment!,
+                                      ),
+                                    _row('Workstation', user.workstation),
                                   ],
                                 ),
                               ),
@@ -238,69 +265,63 @@ class UserHomeScreen extends StatelessWidget {
                             const Text(
                               'Recent Reports',
                               style: TextStyle(
-                                color: primaryGreen,
-                                fontSize: 20,
+                                color: AppColors.primaryGreen,
+                                fontSize: 18,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 12),
                             StreamBuilder<List<WorkReportModel>>(
                               stream:
                                   databaseService.getUserWorkReports(user.id),
-                              builder: (context, snapshot) {
-                                if (snapshot.connectionState ==
+                              builder: (context, snap) {
+                                if (snap.connectionState ==
                                     ConnectionState.waiting) {
                                   return const Center(
-                                    child: CircularProgressIndicator(
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                          primaryGreen),
-                                    ),
+                                    child: CircularProgressIndicator(),
                                   );
                                 }
-
-                                if (snapshot.hasError) {
+                                if (snap.hasError) {
                                   return Center(
                                     child: Text(
-                                      'Error: ${snapshot.error}',
+                                      'Error: ${snap.error}',
                                       style: const TextStyle(color: Colors.red),
                                     ),
                                   );
                                 }
-
-                                final reports = snapshot.data ?? [];
+                                final reports = snap.data ?? [];
                                 if (reports.isEmpty) {
                                   return Center(
                                     child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
                                       children: [
                                         Icon(
                                           Icons.assignment_outlined,
                                           size: 48,
-                                          color: primaryGreen.withOpacity(0.5),
+                                          color: AppColors.primaryGreen
+                                              .withValues(alpha: 0.5),
                                         ),
-                                        const SizedBox(height: 16),
+                                        const SizedBox(height: 8),
                                         const Text(
                                           'No reports submitted yet.',
                                           style: TextStyle(
-                                            color: primaryGreen,
-                                            fontSize: 16,
+                                            color: AppColors.primaryGreen,
                                           ),
                                         ),
                                       ],
                                     ),
                                   );
                                 }
-
                                 return ListView.builder(
                                   shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
+                                  physics:
+                                      const NeverScrollableScrollPhysics(),
                                   itemCount: reports.length,
-                                  itemBuilder: (context, index) {
-                                    final report = reports[index];
+                                  itemBuilder: (context, i) {
+                                    final report = reports[i];
                                     return Card(
                                       elevation: 1,
-                                      margin: const EdgeInsets.only(bottom: 8),
+                                      margin:
+                                          const EdgeInsets.only(bottom: 8),
                                       child: ListTile(
                                         contentPadding:
                                             const EdgeInsets.all(16),
@@ -308,20 +329,21 @@ class UserHomeScreen extends StatelessWidget {
                                           report.task,
                                           style: const TextStyle(
                                             fontWeight: FontWeight.bold,
-                                            color: primaryGreen,
+                                            color: AppColors.primaryGreen,
                                           ),
                                         ),
                                         subtitle: Column(
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
-                                            const SizedBox(height: 8),
+                                            const SizedBox(height: 6),
                                             Row(
                                               children: [
                                                 const Icon(
                                                   Icons.location_on,
-                                                  size: 16,
-                                                  color: secondaryGreen,
+                                                  size: 14,
+                                                  color:
+                                                      AppColors.secondaryGreen,
                                                 ),
                                                 const SizedBox(width: 4),
                                                 Expanded(
@@ -334,18 +356,20 @@ class UserHomeScreen extends StatelessWidget {
                                                 ),
                                               ],
                                             ),
-                                            const SizedBox(height: 4),
+                                            const SizedBox(height: 2),
                                             Row(
                                               children: [
                                                 const Icon(
                                                   Icons.access_time,
-                                                  size: 16,
-                                                  color: secondaryGreen,
+                                                  size: 14,
+                                                  color:
+                                                      AppColors.secondaryGreen,
                                                 ),
                                                 const SizedBox(width: 4),
                                                 Text(
-                                                  DateFormat('yyyy-MM-dd HH:mm')
-                                                      .format(report.date),
+                                                  DateFormat(
+                                                    'yyyy-MM-dd HH:mm',
+                                                  ).format(report.date),
                                                   style: TextStyle(
                                                     color: Colors.grey[600],
                                                     fontSize: 12,
@@ -357,8 +381,7 @@ class UserHomeScreen extends StatelessWidget {
                                         ),
                                         trailing: const Icon(
                                           Icons.check_circle,
-                                          color: secondaryGreen,
-                                          size: 28,
+                                          color: AppColors.secondaryGreen,
                                         ),
                                       ),
                                     );
@@ -375,22 +398,22 @@ class UserHomeScreen extends StatelessWidget {
               },
             ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: primaryGreen,
+        backgroundColor: AppColors.primaryGreen,
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const ReportRouter()),
+            MaterialPageRoute(builder: (_) => const ReportRouter()),
           );
         },
-        child: const Icon(Icons.add, color: Colors.white),
         tooltip: 'Submit Work Report',
+        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _row(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
